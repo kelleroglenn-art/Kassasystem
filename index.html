@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Färgbutik — Självbetjäning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<style>
+  :root {
+    --ink: #1a1a18;
+    --paper: #f5f0e8;
+    --cream: #ede8dc;
+    --accent: #c8472a;
+    --accent2: #4a7c59;
+    --muted: #8a857a;
+    --card: #ffffff;
+    --border: #d8d0c0;
+    --shadow: 0 2px 12px rgba(26,26,24,0.08);
+    --shadow-lg: 0 8px 32px rgba(26,26,24,0.14);
+    --r: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100dvh;
+    overscroll-behavior: none;
+  }
+
+  /* ── SCREENS ── */
+  .screen { display: none; min-height: 100dvh; flex-direction: column; }
+  .screen.active { display: flex; }
+
+  /* ── HEADER ── */
+  .header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-title { font-family: 'DM Serif Display', serif; font-size: 1.2rem; flex: 1; }
+  .header-sub { font-size: 0.75rem; opacity: 0.6; margin-top: 1px; }
+  .btn-back {
+    background: rgba(255,255,255,0.12);
+    border: none;
+    color: var(--paper);
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lang-toggle {
+    background: rgba(255,255,255,0.12);
+    border: none;
+    color: var(--paper);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 14px 20px;
+    border-radius: var(--r);
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-decoration: none;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--ink); color: var(--paper); }
+  .btn-accent { background: var(--accent); color: white; }
+  .btn-accent2 { background: var(--accent2); color: white; }
+  .btn-outline { background: transparent; color: var(--ink); border: 1.5px solid var(--border); }
+  .btn-full { width: 100%; }
+  .btn-lg { padding: 18px 24px; font-size: 1.05rem; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card);
+    border-radius: var(--r);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  /* ── FORMS ── */
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 0.8rem; font-weight: 500; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .field input, .field select {
+    width: 100%;
+    padding: 13px 16px;
+    border: 1.5px solid var(--border);
+    border-radius: var(--r);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1rem;
+    background: var(--card);
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--ink); }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--ink); color: var(--paper);
+    padding: 12px 20px; border-radius: 24px;
+    font-size: 0.9rem; font-weight: 500;
+    z-index: 9999; transition: transform 0.3s;
+    white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── LOADING ── */
+  #loading {
+    position: fixed; inset: 0;
+    background: var(--paper);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 9998;
+    gap: 16px;
+  }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--ink);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ══════════════════════════════════════════════
+     SCREEN 1 — LANGUAGE / START
+  ══════════════════════════════════════════════ */
+  #screen-lang {
+    align-items: center;
+    justify-content: center;
+    padding: 40px 24px;
+    gap: 32px;
+    background: var(--ink);
+  }
+  .logo-area { text-align: center; }
+  .logo-area h1 { font-family: 'DM Serif Display', serif; color: var(--paper); font-size: 2rem; margin-bottom: 4px; }
+  .logo-area p { color: rgba(245,240,232,0.5); font-size: 0.9rem; }
+  .lang-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 320px; }
+  .lang-btn {
+    background: rgba(255,255,255,0.08);
+    border: 1.5px solid rgba(255,255,255,0.15);
+    border-radius: var(--r);
+    color: var(--paper);
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.15s;
+  }
+  .lang-btn:active { background: rgba(255,255,255,0.2); }
+  .lang-btn .flag { font-size: 2rem; display: block; margin-bottom: 6px; }
+  .lang-btn .lname { font-size: 0.9rem; font-weight: 500; }
+
+  /* ══════════════════════════════════════════════
+     SCREEN 2 — LOGIN
+  ══════════════════════════════════════════════ */
+  #screen-login { padding: 0; }
+  .login-body { padding: 24px; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+  .welcome-text { font-family: 'DM Serif Display', serif; font-size: 1.6rem; color: var(--ink); }
+  .customer-list { display: flex; flex-direction: column; gap: 8px; }
+  .customer-item {
+    background: var(--card);
+    border-radius: var(--r);
+    padding: 16px 20px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    border: 1.5px solid transparent;
+    transition: all 0.15s;
+  }
+  .customer-item:active { border-color: var(--ink); }
+  .customer-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--cream);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 1rem; color: var(--ink);
+    flex-shrink: 0;
+  }
+  .customer-name { font-weight: 500; }
+  .customer-arrow { margin-left: auto; color: var(--muted); }
+  .pin-section { margin-top: 8px; }
+  .pin-label { font-size: 0.85rem; color: var(--muted); margin-bottom: 8px; }
+  .pin-input {
+    width: 100%; padding: 14px; text-align: center;
+    font-size: 1.4rem; letter-spacing: 8px;
+    border: 1.5px solid var(--border); border-radius: var(--r);
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+  }
+  .pin-input:focus { border-color: var(--ink); }
+
+  /* ══════════════════════════════════════════════
+     SCREEN 3 — SHOP (kund)
+  ══════════════════════════════════════════════ */
+  #screen-shop { }
+  .shop-tabs {
+    background: var(--card);
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  .shop-tab {
+    padding: 12px 16px;
+    border: none; background: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.15s;
+  }
+  .shop-tab.active { color: var(--ink); border-bottom-color: var(--ink); font-weight: 500; }
+  .shop-content { flex: 1; overflow-y: auto; padding: 16px; padding-bottom: 100px; }
+  .product-grid { display: flex; flex-direction: column; gap: 10px; }
+  .product-card {
+    background: var(--card);
+    border-radius: var(--r);
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: var(--shadow);
+  }
+  .product-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    background: var(--cream);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; flex-shrink: 0;
+  }
+  .product-info { flex: 1; min-width: 0; }
+  .product-name { font-weight: 500; font-size: 0.95rem; }
+  .product-name-en { font-size: 0.78rem; color: var(--muted); margin-top: 1px; }
+  .product-price { font-size: 0.9rem; color: var(--accent2); font-weight: 600; margin-top: 2px; }
+  .stock-pill {
+    font-size: 0.72rem; padding: 2px 8px; border-radius: 20px;
+    background: var(--cream); color: var(--muted); margin-top: 4px; display: inline-block;
+  }
+  .stock-pill.low { background: #fff0ed; color: var(--accent); }
+  .qty-control { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .qty-btn {
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 1.5px solid var(--border); background: var(--card);
+    font-size: 1.1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.1s;
+  }
+  .qty-btn:active { background: var(--cream); }
+  .qty-val { font-weight: 600; font-size: 1rem; min-width: 20px; text-align: center; }
+
+  /* Cart bar */
+  .cart-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--ink);
+    padding: 12px 20px;
+    display: flex; align-items: center; gap: 12px;
+    z-index: 50;
+    transform: translateY(100%);
+    transition: transform 0.3s;
+  }
+  .cart-bar.visible { transform: translateY(0); }
+  .cart-bar-info { flex: 1; color: var(--paper); }
+  .cart-bar-items { font-size: 0.8rem; opacity: 0.6; }
+  .cart-bar-total { font-weight: 600; font-size: 1.1rem; }
+  .cart-bar-btn {
+    background: var(--accent);
+    color: white; border: none;
+    padding: 12px 20px; border-radius: var(--r);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600; font-size: 0.95rem;
+    cursor: pointer;
+  }
+
+  /* Scanner */
+  #scanner-container {
+    width: 100%; max-height: 260px; overflow: hidden;
+    border-radius: var(--r);
+    background: #000;
+    position: relative;
+    margin-bottom: 12px;
+  }
+  #scanner-container video { width: 100%; display: block; }
+  .scan-line {
+    position: absolute; left: 10%; right: 10%;
+    height: 2px; background: var(--accent);
+    animation: scanline 2s ease-in-out infinite;
+    top: 50%;
+  }
+  @keyframes scanline {
+    0%, 100% { top: 30%; }
+    50% { top: 70%; }
+  }
+
+  /* ══════════════════════════════════════════════
+     SCREEN 4 — CART / CHECKOUT
+  ══════════════════════════════════════════════ */
+  #screen-cart { }
+  .cart-content { flex: 1; overflow-y: auto; padding: 16px; }
+  .cart-item {
+    background: var(--card);
+    border-radius: var(--r);
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 10px;
+    box-shadow: var(--shadow);
+  }
+  .cart-item-info { flex: 1; }
+  .cart-item-name { font-weight: 500; }
+  .cart-item-sub { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+  .cart-item-price { font-weight: 600; color: var(--accent2); }
+  .remove-btn {
+    background: none; border: none; color: var(--muted);
+    font-size: 1.2rem; cursor: pointer; padding: 4px;
+  }
+  .cart-total-row {
+    background: var(--cream);
+    border-radius: var(--r);
+    padding: 16px 20px;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px;
+  }
+  .cart-total-label { font-weight: 500; color: var(--muted); }
+  .cart-total-amount { font-family: 'DM Serif Display', serif; font-size: 1.8rem; }
+  .swish-box {
+    background: #edf7f0;
+    border: 1.5px solid #c0e0cc;
+    border-radius: var(--r);
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+  .swish-box h3 { font-size: 0.85rem; font-weight: 600; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+  .swish-number { font-family: 'DM Serif Display', serif; font-size: 1.4rem; color: var(--ink); }
+  .swish-ref { font-size: 0.85rem; color: var(--muted); margin-top: 4px; }
+
+  /* ══════════════════════════════════════════════
+     SCREEN 5 — ADMIN
+  ══════════════════════════════════════════════ */
+  #screen-admin { }
+  .admin-content { flex: 1; overflow-y: auto; padding: 16px; padding-bottom: 40px; }
+  .admin-section { margin-bottom: 24px; }
+  .section-title {
+    font-size: 0.78rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 12px;
+  }
+  .order-card {
+    background: var(--card);
+    border-radius: var(--r);
+    box-shadow: var(--shadow);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .order-header {
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .order-badge {
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 0.75rem; font-weight: 600;
+  }
+  .badge-pending { background: #fff3e0; color: #c47a00; }
+  .badge-done { background: #edf7f0; color: var(--accent2); }
+  .order-customer { font-weight: 600; flex: 1; }
+  .order-time { font-size: 0.78rem; color: var(--muted); }
+  .order-body { padding: 12px 16px; }
+  .order-items-list { font-size: 0.9rem; color: var(--muted); margin-bottom: 10px; }
+  .order-total { font-weight: 700; font-size: 1.1rem; color: var(--ink); }
+  .confirm-btn {
+    background: var(--accent2); color: white; border: none;
+    padding: 10px 16px; border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 0.9rem;
+    cursor: pointer; width: 100%; margin-top: 8px;
+  }
+
+  .stock-overview { display: flex; flex-direction: column; gap: 8px; }
+  .stock-row {
+    background: var(--card); border-radius: var(--r);
+    padding: 12px 16px; box-shadow: var(--shadow);
+  }
+  .stock-row-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .stock-row-name { font-weight: 600; }
+  .stock-items { display: flex; flex-wrap: wrap; gap: 6px; }
+  .stock-pill-admin {
+    padding: 4px 10px; border-radius: 20px;
+    font-size: 0.8rem; background: var(--cream);
+  }
+  .stock-pill-admin.low { background: #fff0ed; color: var(--accent); font-weight: 600; }
+
+  .admin-tabs {
+    background: var(--card);
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .admin-tab {
+    padding: 14px 18px;
+    border: none; background: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.88rem; color: var(--muted);
+    cursor: pointer; white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.15s;
+  }
+  .admin-tab.active { color: var(--ink); border-bottom-color: var(--ink); font-weight: 500; }
+
+  .form-card { background: var(--card); border-radius: var(--r); padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px; }
+
+  /* Settings screen link */
+  .settings-link {
+    position: absolute; top: 14px; right: 60px;
+    background: rgba(255,255,255,0.12);
+    border: none; color: var(--paper);
+    width: 36px; height: 36px; border-radius: 50%;
+    font-size: 1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <p style="color:var(--muted);font-size:0.9rem" id="loading-text">Laddar...</p>
+</div>
+
+<div id="toast"></div>
+
+<!-- ══ SCREEN: LANGUAGE ══ -->
+<div class="screen active" id="screen-lang">
+  <div class="logo-area">
+    <h1>Färgbutik</h1>
+    <p>Självbetjäning / Self-service</p>
+  </div>
+  <div class="lang-grid">
+    <div class="lang-btn" onclick="setLang('sv')">
+      <span class="flag">🇸🇪</span>
+      <span class="lname">Svenska</span>
+    </div>
+    <div class="lang-btn" onclick="setLang('en')">
+      <span class="flag">🇬🇧</span>
+      <span class="lname">English</span>
+    </div>
+  </div>
+  <button class="btn btn-outline" style="color:rgba(245,240,232,0.4);border-color:rgba(255,255,255,0.15);background:rgba(255,255,255,0.05)" onclick="goAdmin()">
+    ⚙️ Admin
+  </button>
+</div>
+
+<!-- ══ SCREEN: LOGIN ══ -->
+<div class="screen" id="screen-login">
+  <div class="header">
+    <button class="btn-back" onclick="showScreen('screen-lang')">←</button>
+    <div>
+      <div class="header-title" id="login-title">Välj kund</div>
+    </div>
+    <button class="lang-toggle" onclick="toggleLang()" id="lang-btn">EN</button>
+  </div>
+  <div class="login-body">
+    <div class="welcome-text" id="welcome-text">Välkommen!</div>
+    <p style="color:var(--muted);font-size:0.9rem" id="choose-text">Välj din skola eller kursgård:</p>
+    <div class="customer-list" id="customer-list"></div>
+    <div class="pin-section" id="pin-section" style="display:none">
+      <div class="pin-label" id="pin-label">Ange PIN-kod:</div>
+      <input type="password" inputmode="numeric" maxlength="6" class="pin-input" id="pin-input" placeholder="••••" oninput="checkPin(this.value)">
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN: SHOP ══ -->
+<div class="screen" id="screen-shop">
+  <div class="header">
+    <button class="btn-back" onclick="confirmLeave()">←</button>
+    <div>
+      <div class="header-title" id="shop-title">Handla</div>
+      <div class="header-sub" id="shop-customer-name"></div>
+    </div>
+    <button class="lang-toggle" onclick="toggleLang()" id="lang-btn2">EN</button>
+  </div>
+  <div class="shop-tabs" id="shop-tabs">
+    <button class="shop-tab active" data-tab="browse" onclick="switchShopTab('browse')" id="tab-browse">Produkter</button>
+    <button class="shop-tab" data-tab="scan" onclick="switchShopTab('scan')" id="tab-scan">📷 Skanna</button>
+    <button class="shop-tab" data-tab="returns" onclick="switchShopTab('returns')" id="tab-returns">Lämna tillbaka</button>
+  </div>
+  <div class="shop-content" id="shop-content">
+    <!-- filled by JS -->
+  </div>
+  <div class="cart-bar" id="cart-bar">
+    <div class="cart-bar-info">
+      <div class="cart-bar-items" id="cart-bar-items"></div>
+      <div class="cart-bar-total" id="cart-bar-total"></div>
+    </div>
+    <button class="cart-bar-btn" onclick="showScreen('screen-cart')" id="cart-btn-label">Kassa →</button>
+  </div>
+</div>
+
+<!-- ══ SCREEN: CART ══ -->
+<div class="screen" id="screen-cart">
+  <div class="header">
+    <button class="btn-back" onclick="showScreen('screen-shop')">←</button>
+    <div><div class="header-title" id="cart-title">Din varukorg</div></div>
+  </div>
+  <div class="cart-content" id="cart-content">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<!-- ══ SCREEN: ADMIN ══ -->
+<div class="screen" id="screen-admin">
+  <div class="header" style="position:relative">
+    <button class="btn-back" onclick="showScreen('screen-lang')">←</button>
+    <div><div class="header-title">Admin</div></div>
+    <button class="lang-toggle" onclick="toggleLang()">EN / SV</button>
+  </div>
+  <div class="admin-tabs">
+    <button class="admin-tab active" onclick="switchAdminTab('orders')" id="atab-orders">Orders</button>
+    <button class="admin-tab" onclick="switchAdminTab('stock')" id="atab-stock">Lager</button>
+    <button class="admin-tab" onclick="switchAdminTab('products')" id="atab-products">Produkter</button>
+    <button class="admin-tab" onclick="switchAdminTab('customers')" id="atab-customers">Kunder</button>
+    <button class="admin-tab" onclick="switchAdminTab('settings')" id="atab-settings">⚙️</button>
+  </div>
+  <div class="admin-content" id="admin-content"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+let lang = 'sv';
+let currentCustomer = null;
+let cart = []; // {productId, name, nameEn, price, quantity}
+let returns = []; // same shape
+let appData = { products: [], customers: [], stock: [], orders: [] };
+let selectedCustomerForPin = null;
+let scannerActive = false;
+
+// Google Apps Script URL — REPLACE THIS after deploying
+const SCRIPT_URL = localStorage.getItem('scriptUrl') || 'https://script.google.com/macros/s/AKfycbxmFjQddjw8qYLFJEMgj_jC8ywM1d5YcmglEHf5N4ocAffrryKelFvObqlvCC-8i35i/exec';
+
+// ── TRANSLATIONS ──
+const T = {
+  sv: {
+    loading: 'Laddar...', loginTitle: 'Välj kund', welcome: 'Välkommen!',
+    choose: 'Välj din skola eller kursgård:',
+    pin: 'Ange PIN-kod:', pinWrong: 'Fel PIN, försök igen',
+    products: 'Produkter', scan: '📷 Skanna', returns: 'Lämna tillbaka',
+    cart: 'Din varukorg', checkout: 'Kassa →', inStock: 'I lager',
+    lowStock: 'Lågt lager', noStock: 'Slut',
+    total: 'Totalt', placeOrder: 'Skicka order',
+    swishTitle: 'Betalning via Swish Företag', swishRef: 'Ange referens',
+    orderSent: '✓ Order skickad!', orderFail: 'Fel — försök igen',
+    confirmLeave: 'Lämna utan att slutföra?',
+    scanHint: 'Rikta kameran mot streckkoden',
+    emptyCart: 'Varukorgen är tom',
+    addReturns: 'Välj produkter att lämna tillbaka',
+    submitReturn: 'Registrera retur',
+    returnSent: '✓ Retur registrerad',
+    adminPin: 'Admin PIN:', adminPinWrong: 'Fel admin-PIN',
+    confirmOrder: '✓ Registrerad i kassan',
+    stockFor: 'Lager för',
+    addProduct: 'Lägg till produkt', addCustomer: 'Lägg till kund',
+    save: 'Spara', cancel: 'Avbryt',
+    noOrders: 'Inga väntande orders',
+    pending: 'Väntande', done: 'Klar',
+    scriptUrl: 'Google Apps Script URL',
+    saveUrl: 'Spara URL',
+    urlSaved: 'URL sparad — ladda om appen',
+    each: 'st', kr: 'kr'
+  },
+  en: {
+    loading: 'Loading...', loginTitle: 'Choose customer', welcome: 'Welcome!',
+    choose: 'Select your school or venue:',
+    pin: 'Enter PIN code:', pinWrong: 'Wrong PIN, try again',
+    products: 'Products', scan: '📷 Scan', returns: 'Return items',
+    cart: 'Your cart', checkout: 'Checkout →', inStock: 'In stock',
+    lowStock: 'Low stock', noStock: 'Out of stock',
+    total: 'Total', placeOrder: 'Place order',
+    swishTitle: 'Payment via Swish', swishRef: 'Enter reference',
+    orderSent: '✓ Order sent!', orderFail: 'Error — please try again',
+    confirmLeave: 'Leave without completing?',
+    scanHint: 'Point camera at barcode',
+    emptyCart: 'Your cart is empty',
+    addReturns: 'Select items to return',
+    submitReturn: 'Submit return',
+    returnSent: '✓ Return registered',
+    adminPin: 'Admin PIN:', adminPinWrong: 'Wrong admin PIN',
+    confirmOrder: '✓ Registered in register',
+    stockFor: 'Stock for',
+    addProduct: 'Add product', addCustomer: 'Add customer',
+    save: 'Save', cancel: 'Cancel',
+    noOrders: 'No pending orders',
+    pending: 'Pending', done: 'Done',
+    scriptUrl: 'Google Apps Script URL',
+    saveUrl: 'Save URL',
+    urlSaved: 'URL saved — reload app',
+    each: 'pcs', kr: 'SEK'
+  }
+};
+const t = (k) => (T[lang] || T.sv)[k] || k;
+
+// ═══════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════
+async function init() {
+  document.getElementById('loading-text').textContent = t('loading');
+  if (!SCRIPT_URL) {
+    // No URL yet — use demo data
+    appData = getDemoData();
+    document.getElementById('loading').style.display = 'none';
+    return;
+  }
+  try {
+    const res = await fetch(SCRIPT_URL);
+    const data = await res.json();
+    if (data.products) appData = data;
+    else appData = getDemoData();
+  } catch (e) {
+    appData = getDemoData();
+    toast('Offline — använder lokal data');
+  }
+  document.getElementById('loading').style.display = 'none';
+}
+
+function getDemoData() {
+  return {
+    products: [
+      { ProduktID:'P1', Namn:'Akvarellfärg', NamnEN:'Watercolor', Streckkod:'7312345678901', Pris:89, Enhet:'st', Kategori:'Färg' },
+      { ProduktID:'P2', Namn:'Pensel set', NamnEN:'Brush set', Streckkod:'7312345678902', Pris:145, Enhet:'st', Kategori:'Penslar' },
+      { ProduktID:'P3', Namn:'Ritblock A4', NamnEN:'Drawing pad A4', Streckkod:'7312345678903', Pris:65, Enhet:'st', Kategori:'Papper' },
+      { ProduktID:'P4', Namn:'Akrylfärg', NamnEN:'Acrylic paint', Streckkod:'7312345678904', Pris:119, Enhet:'st', Kategori:'Färg' },
+      { ProduktID:'P5', Namn:'Palett', NamnEN:'Palette', Streckkod:'7312345678905', Pris:45, Enhet:'st', Kategori:'Tillbehör' },
+      { ProduktID:'P6', Namn:'Tejp', NamnEN:'Tape', Streckkod:'7312345678906', Pris:35, Enhet:'st', Kategori:'Tillbehör' },
+    ],
+    customers: [
+      { KundID:'C1', Namn:'Jakobsgården', Email:'jakob@example.com', PIN:'1234', SwishRef:'JAK' },
+      { KundID:'C2', Namn:'Saraskolan', Email:'sara@example.com', PIN:'5678', SwishRef:'SAR' },
+      { KundID:'C3', Namn:'Gröna Lund Kursgård', Email:'gronan@example.com', PIN:'9012', SwishRef:'GRO' },
+    ],
+    stock: [
+      { KundID:'C1', KundNamn:'Jakobsgården', ProduktID:'P1', ProduktNamn:'Akvarellfärg', Antal:8 },
+      { KundID:'C1', KundNamn:'Jakobsgården', ProduktID:'P2', ProduktNamn:'Pensel set', Antal:3 },
+      { KundID:'C1', KundNamn:'Jakobsgården', ProduktID:'P3', ProduktNamn:'Ritblock A4', Antal:12 },
+      { KundID:'C1', KundNamn:'Jakobsgården', ProduktID:'P4', ProduktNamn:'Akrylfärg', Antal:2 },
+      { KundID:'C1', KundNamn:'Jakobsgården', ProduktID:'P5', ProduktNamn:'Palett', Antal:5 },
+      { KundID:'C1', KundNamn:'Jakobsgården', ProduktID:'P6', ProduktNamn:'Tejp', Antal:0 },
+      { KundID:'C2', KundNamn:'Saraskolan', ProduktID:'P1', ProduktNamn:'Akvarellfärg', Antal:15 },
+      { KundID:'C2', KundNamn:'Saraskolan', ProduktID:'P2', ProduktNamn:'Pensel set', Antal:1 },
+      { KundID:'C2', KundNamn:'Saraskolan', ProduktID:'P3', ProduktNamn:'Ritblock A4', Antal:7 },
+      { KundID:'C2', KundNamn:'Saraskolan', ProduktID:'P4', ProduktNamn:'Akrylfärg', Antal:0 },
+      { KundID:'C2', KundNamn:'Saraskolan', ProduktID:'P5', ProduktNamn:'Palett', Antal:4 },
+      { KundID:'C2', KundNamn:'Saraskolan', ProduktID:'P6', ProduktNamn:'Tejp', Antal:6 },
+      { KundID:'C3', KundNamn:'Gröna Lund Kursgård', ProduktID:'P1', ProduktNamn:'Akvarellfärg', Antal:20 },
+      { KundID:'C3', KundNamn:'Gröna Lund Kursgård', ProduktID:'P2', ProduktNamn:'Pensel set', Antal:8 },
+      { KundID:'C3', KundNamn:'Gröna Lund Kursgård', ProduktID:'P3', ProduktNamn:'Ritblock A4', Antal:14 },
+      { KundID:'C3', KundNamn:'Gröna Lund Kursgård', ProduktID:'P4', ProduktNamn:'Akrylfärg', Antal:3 },
+      { KundID:'C3', KundNamn:'Gröna Lund Kursgård', ProduktID:'P5', ProduktNamn:'Palett', Antal:2 },
+      { KundID:'C3', KundNamn:'Gröna Lund Kursgård', ProduktID:'P6', ProduktNamn:'Tejp', Antal:10 },
+    ],
+    orders: []
+  };
+}
+
+// ═══════════════════════════════════════════════
+// LANGUAGE
+// ═══════════════════════════════════════════════
+function setLang(l) {
+  lang = l;
+  document.getElementById('lang-btn').textContent = l === 'sv' ? 'EN' : 'SV';
+  document.getElementById('lang-btn2').textContent = l === 'sv' ? 'EN' : 'SV';
+  showScreen('screen-login');
+  renderLoginScreen();
+}
+function toggleLang() {
+  lang = lang === 'sv' ? 'en' : 'sv';
+  document.getElementById('lang-btn').textContent = lang === 'sv' ? 'EN' : 'SV';
+  document.getElementById('lang-btn2').textContent = lang === 'sv' ? 'EN' : 'SV';
+  // refresh current screen text
+  const active = document.querySelector('.screen.active');
+  if (active.id === 'screen-login') renderLoginScreen();
+  if (active.id === 'screen-shop') renderShopContent();
+  if (active.id === 'screen-cart') renderCart();
+}
+
+// ═══════════════════════════════════════════════
+// SCREENS
+// ═══════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id !== 'screen-shop' && scannerActive) stopScanner();
+}
+function goAdmin() {
+  // Simple admin PIN
+  const pin = prompt('Admin PIN:');
+  if (pin === (localStorage.getItem('adminPin') || '0000')) {
+    showScreen('screen-admin');
+    renderAdminContent('orders');
+  } else {
+    toast(t('adminPinWrong'));
+  }
+}
+
+// ═══════════════════════════════════════════════
+// LOGIN SCREEN
+// ═══════════════════════════════════════════════
+function renderLoginScreen() {
+  document.getElementById('login-title').textContent = t('loginTitle');
+  document.getElementById('welcome-text').textContent = t('welcome');
+  document.getElementById('choose-text').textContent = t('choose');
+  document.getElementById('pin-section').style.display = 'none';
+  document.getElementById('pin-input').value = '';
+
+  const list = document.getElementById('customer-list');
+  list.innerHTML = appData.customers.map(c => `
+    <div class="customer-item" onclick="selectCustomer('${c.KundID}')">
+      <div class="customer-avatar">${c.Namn[0]}</div>
+      <div class="customer-name">${c.Namn}</div>
+      <div class="customer-arrow">›</div>
+    </div>
+  `).join('');
+}
+
+function selectCustomer(id) {
+  selectedCustomerForPin = appData.customers.find(c => c.KundID === id);
+  document.getElementById('pin-section').style.display = 'block';
+  document.getElementById('pin-label').textContent = t('pin');
+  document.getElementById('pin-input').focus();
+}
+
+function checkPin(val) {
+  if (!selectedCustomerForPin) return;
+  if (val.length >= 4 && val === String(selectedCustomerForPin.PIN)) {
+    currentCustomer = selectedCustomerForPin;
+    cart = []; returns = [];
+    showScreen('screen-shop');
+    renderShopTabs();
+    renderShopContent();
+    document.getElementById('shop-customer-name').textContent = currentCustomer.Namn;
+    document.getElementById('shop-title').textContent = t('products');
+  } else if (val.length >= 4) {
+    toast(t('pinWrong'));
+    document.getElementById('pin-input').value = '';
+  }
+}
+
+// ═══════════════════════════════════════════════
+// SHOP
+// ═══════════════════════════════════════════════
+let currentShopTab = 'browse';
+
+function renderShopTabs() {
+  document.getElementById('tab-browse').textContent = t('products');
+  document.getElementById('tab-scan').textContent = t('scan');
+  document.getElementById('tab-returns').textContent = t('returns');
+}
+
+function switchShopTab(tab) {
+  currentShopTab = tab;
+  document.querySelectorAll('.shop-tab').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.shop-tab[data-tab="${tab}"]`).classList.add('active');
+  if (tab !== 'scan' && scannerActive) stopScanner();
+  renderShopContent();
+}
+
+function getCustomerStock(productId) {
+  if (!currentCustomer) return 0;
+  const row = appData.stock.find(s => s.KundID === currentCustomer.KundID && s.ProduktID === productId);
+  return row ? Number(row.Antal) : 0;
+}
+
+function getCartQty(productId) {
+  const item = cart.find(i => i.productId === productId);
+  return item ? item.quantity : 0;
+}
+
+function renderShopContent() {
+  const el = document.getElementById('shop-content');
+  if (currentShopTab === 'browse') {
+    el.innerHTML = `<div class="product-grid">${appData.products.map(p => renderProductCard(p)).join('')}</div>`;
+  } else if (currentShopTab === 'scan') {
+    el.innerHTML = `
+      <div id="scanner-container"><div class="scan-line"></div></div>
+      <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin-bottom:16px">${t('scanHint')}</p>
+      <div class="product-grid" id="scanned-results"></div>
+    `;
+    startScanner();
+  } else if (currentShopTab === 'returns') {
+    el.innerHTML = `
+      <p style="color:var(--muted);font-size:0.9rem;margin-bottom:12px">${t('addReturns')}</p>
+      <div class="product-grid">${appData.products.map(p => renderReturnCard(p)).join('')}</div>
+      ${returns.length > 0 ? `<button class="btn btn-accent2 btn-full" style="margin-top:16px" onclick="submitReturn()">${t('submitReturn')}</button>` : ''}
+    `;
+  }
+  updateCartBar();
+}
+
+const CATEGORY_ICONS = { 'Färg': '🎨', 'Penslar': '🖌️', 'Papper': '📄', 'Tillbehör': '🧰' };
+
+function renderProductCard(p) {
+  const stock = getCustomerStock(p.ProduktID);
+  const qty = getCartQty(p.ProduktID);
+  const icon = CATEGORY_ICONS[p.Kategori] || '📦';
+  const stockClass = stock === 0 ? 'low' : stock <= 3 ? 'low' : '';
+  const stockLabel = stock === 0 ? t('noStock') : stock <= 3 ? `${t('lowStock')}: ${stock}` : `${t('inStock')}: ${stock}`;
+  const name = lang === 'en' && p.NamnEN ? p.NamnEN : p.Namn;
+  return `
+    <div class="product-card">
+      <div class="product-icon">${icon}</div>
+      <div class="product-info">
+        <div class="product-name">${name}</div>
+        ${p.NamnEN && lang === 'sv' ? `<div class="product-name-en">${p.NamnEN}</div>` : ''}
+        <div class="product-price">${p.Pris} ${t('kr')}</div>
+        <span class="stock-pill ${stockClass}">${stockLabel}</span>
+      </div>
+      <div class="qty-control">
+        <button class="qty-btn" onclick="changeQty('${p.ProduktID}',-1)" ${qty===0?'style="opacity:0.3"':''}>−</button>
+        <span class="qty-val">${qty}</span>
+        <button class="qty-btn" onclick="changeQty('${p.ProduktID}',1)" ${stock===0?'disabled style="opacity:0.3"':''}>+</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderReturnCard(p) {
+  const retItem = returns.find(i => i.productId === p.ProduktID);
+  const qty = retItem ? retItem.quantity : 0;
+  const name = lang === 'en' && p.NamnEN ? p.NamnEN : p.Namn;
+  return `
+    <div class="product-card">
+      <div class="product-icon">${CATEGORY_ICONS[p.Kategori] || '📦'}</div>
+      <div class="product-info">
+        <div class="product-name">${name}</div>
+        <div class="product-price">${p.Pris} ${t('kr')}</div>
+      </div>
+      <div class="qty-control">
+        <button class="qty-btn" onclick="changeReturn('${p.ProduktID}',-1)" ${qty===0?'style="opacity:0.3"':''}>−</button>
+        <span class="qty-val">${qty}</span>
+        <button class="qty-btn" onclick="changeReturn('${p.ProduktID}',1)">+</button>
+      </div>
+    </div>
+  `;
+}
+
+function changeQty(productId, delta) {
+  const product = appData.products.find(p => p.ProduktID === productId);
+  const stock = getCustomerStock(productId);
+  const idx = cart.findIndex(i => i.productId === productId);
+  if (idx === -1) {
+    if (delta > 0 && stock > 0) {
+      cart.push({ productId, name: product.Namn, nameEn: product.NamnEN, price: Number(product.Pris), quantity: 1 });
+    }
+  } else {
+    cart[idx].quantity += delta;
+    if (cart[idx].quantity <= 0) cart.splice(idx, 1);
+    if (cart[idx] && cart[idx].quantity > stock) cart[idx].quantity = stock;
+  }
+  renderShopContent();
+}
+
+function changeReturn(productId, delta) {
+  const product = appData.products.find(p => p.ProduktID === productId);
+  const idx = returns.findIndex(i => i.productId === productId);
+  if (idx === -1) {
+    if (delta > 0) returns.push({ productId, name: product.Namn, nameEn: product.NamnEN, price: Number(product.Pris), quantity: 1 });
+  } else {
+    returns[idx].quantity += delta;
+    if (returns[idx].quantity <= 0) returns.splice(idx, 1);
+  }
+  renderShopContent();
+}
+
+function updateCartBar() {
+  const bar = document.getElementById('cart-bar');
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const count = cart.reduce((s, i) => s + i.quantity, 0);
+  if (count === 0) { bar.classList.remove('visible'); return; }
+  bar.classList.add('visible');
+  document.getElementById('cart-bar-items').textContent = `${count} ${t('each')}`;
+  document.getElementById('cart-bar-total').textContent = `${total} ${t('kr')}`;
+  document.getElementById('cart-btn-label').textContent = t('checkout');
+}
+
+// ─── SCANNER ───
+function startScanner() {
+  if (scannerActive) return;
+  scannerActive = true;
+  Quagga.init({
+    inputStream: { name: 'Live', type: 'LiveStream', target: document.getElementById('scanner-container'), constraints: { facingMode: 'environment' } },
+    decoder: { readers: ['ean_reader', 'ean_8_reader', 'code_128_reader'] }
+  }, err => {
+    if (!err) Quagga.start();
+  });
+  Quagga.onDetected(result => {
+    const code = result.codeResult.code;
+    const product = appData.products.find(p => p.Streckkod === code);
+    if (product) {
+      changeQty(product.ProduktID, 1);
+      toast(`+ ${lang === 'en' && product.NamnEN ? product.NamnEN : product.Namn}`);
+      const el = document.getElementById('scanned-results');
+      if (el) el.innerHTML = renderProductCard(product);
+    }
+  });
+}
+function stopScanner() {
+  if (!scannerActive) return;
+  try { Quagga.stop(); } catch(e){}
+  scannerActive = false;
+}
+
+// ═══════════════════════════════════════════════
+// CART / CHECKOUT
+// ═══════════════════════════════════════════════
+function renderCart() {
+  const el = document.getElementById('cart-content');
+  document.getElementById('cart-title').textContent = t('cart');
+  if (cart.length === 0) {
+    el.innerHTML = `<p style="text-align:center;padding:40px;color:var(--muted)">${t('emptyCart')}</p>`;
+    return;
+  }
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const swishNum = localStorage.getItem('swishNumber') || '070-000 00 00';
+  const ref = currentCustomer ? currentCustomer.SwishRef : '';
+  el.innerHTML = `
+    <div>${cart.map(i => `
+      <div class="cart-item">
+        <div class="cart-item-info">
+          <div class="cart-item-name">${lang === 'en' && i.nameEn ? i.nameEn : i.name}</div>
+          <div class="cart-item-sub">${i.quantity} × ${i.price} ${t('kr')}</div>
+        </div>
+        <div class="cart-item-price">${i.price * i.quantity} ${t('kr')}</div>
+        <button class="remove-btn" onclick="removeCartItem('${i.productId}')">✕</button>
+      </div>
+    `).join('')}</div>
+    <div class="cart-total-row">
+      <span class="cart-total-label">${t('total')}</span>
+      <span class="cart-total-amount">${total} ${t('kr')}</span>
+    </div>
+    <div class="swish-box">
+      <h3>${t('swishTitle')}</h3>
+      <div class="swish-number">${swishNum}</div>
+      <div class="swish-ref">${t('swishRef')}: <strong>${ref}</strong></div>
+    </div>
+    <button class="btn btn-accent btn-full btn-lg" onclick="placeOrder()">${t('placeOrder')}</button>
+    <br>
+    <button class="btn btn-outline btn-full" onclick="showScreen('screen-shop')">${t('cancel')}</button>
+  `;
+}
+
+function removeCartItem(productId) {
+  cart = cart.filter(i => i.productId !== productId);
+  renderCart();
+  updateCartBar();
+}
+
+async function placeOrder() {
+  if (!currentCustomer || cart.length === 0) return;
+  const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+  const order = {
+    action: 'saveOrder',
+    customerId: currentCustomer.KundID,
+    customerName: currentCustomer.Namn,
+    items: cart.map(i => ({ productId: i.productId, name: i.name, quantity: i.quantity, price: i.price })),
+    total
+  };
+
+  // Update local stock
+  cart.forEach(item => {
+    const row = appData.stock.find(s => s.KundID === currentCustomer.KundID && s.ProduktID === item.productId);
+    if (row) row.Antal = Math.max(0, Number(row.Antal) - item.quantity);
+  });
+
+  // Save to orders list locally
+  appData.orders.push({ ...order, OrderID: 'ORD-' + Date.now(), Timestamp: new Date().toISOString(), Status: 'Väntande', Items: JSON.stringify(order.items) });
+
+  // Try to sync
+  if (SCRIPT_URL) {
+    try { await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(order) }); } catch(e){}
+  }
+
+  cart = [];
+  toast(t('orderSent'));
+  setTimeout(() => { showScreen('screen-lang'); }, 1800);
+}
+
+async function submitReturn() {
+  if (!currentCustomer || returns.length === 0) return;
+  // Update local stock
+  returns.forEach(item => {
+    const row = appData.stock.find(s => s.KundID === currentCustomer.KundID && s.ProduktID === item.productId);
+    if (row) row.Antal = Number(row.Antal) + item.quantity;
+  });
+  if (SCRIPT_URL) {
+    try {
+      await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'updateStock', customerId: currentCustomer.KundID, items: returns.map(i => ({ productId: i.productId, quantity: i.quantity })), direction: 'add' }) });
+    } catch(e){}
+  }
+  returns = [];
+  toast(t('returnSent'));
+  renderShopContent();
+}
+
+function confirmLeave() {
+  if (cart.length > 0 && !confirm(t('confirmLeave'))) return;
+  cart = []; returns = [];
+  showScreen('screen-lang');
+}
+
+// ═══════════════════════════════════════════════
+// ADMIN
+// ═══════════════════════════════════════════════
+let currentAdminTab = 'orders';
+
+function switchAdminTab(tab) {
+  currentAdminTab = tab;
+  document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById(`atab-${tab}`).classList.add('active');
+  renderAdminContent(tab);
+}
+
+function renderAdminContent(tab) {
+  const el = document.getElementById('admin-content');
+  if (tab === 'orders') el.innerHTML = renderAdminOrders();
+  else if (tab === 'stock') el.innerHTML = renderAdminStock();
+  else if (tab === 'products') el.innerHTML = renderAdminProducts();
+  else if (tab === 'customers') el.innerHTML = renderAdminCustomers();
+  else if (tab === 'settings') el.innerHTML = renderAdminSettings();
+}
+
+function renderAdminOrders() {
+  const pending = appData.orders.filter(o => o.Status === 'Väntande' || o.Status === 'Pending');
+  const done = appData.orders.filter(o => o.Status !== 'Väntande' && o.Status !== 'Pending');
+  if (appData.orders.length === 0) return `<p style="text-align:center;padding:40px;color:var(--muted)">${t('noOrders')}</p>`;
+
+  const renderOrder = (o, showConfirm) => {
+    let items = [];
+    try { items = JSON.parse(o.Items || o.itemsJson || '[]'); } catch(e){}
+    const itemsText = items.map(i => `${i.quantity}× ${i.name}`).join(', ');
+    const time = o.Timestamp ? new Date(o.Timestamp).toLocaleString('sv-SE') : '';
+    return `
+      <div class="order-card">
+        <div class="order-header">
+          <span class="order-badge ${showConfirm ? 'badge-pending' : 'badge-done'}">${showConfirm ? t('pending') : t('done')}</span>
+          <span class="order-customer">${o.customerName || o.KundNamn}</span>
+          <span class="order-time">${time}</span>
+        </div>
+        <div class="order-body">
+          <div class="order-items-list">${itemsText}</div>
+          <div class="order-total">${o.total || o.Total} ${t('kr')}</div>
+          ${showConfirm ? `<button class="confirm-btn" onclick="confirmOrderAdmin('${o.OrderID || o.orderId}')">${t('confirmOrder')}</button>` : ''}
+        </div>
+      </div>
+    `;
+  };
+
+  return `
+    <div class="admin-section">
+      <div class="section-title">${t('pending')}</div>
+      ${pending.map(o => renderOrder(o, true)).join('') || `<p style="color:var(--muted);font-size:0.9rem">${t('noOrders')}</p>`}
+    </div>
+    <div class="admin-section">
+      <div class="section-title">${t('done')}</div>
+      ${done.map(o => renderOrder(o, false)).join('')}
+    </div>
+  `;
+}
+
+function renderAdminStock() {
+  const byCustomer = {};
+  appData.customers.forEach(c => { byCustomer[c.KundID] = { name: c.Namn, items: [] }; });
+  appData.stock.forEach(s => {
+    if (byCustomer[s.KundID]) byCustomer[s.KundID].items.push(s);
+  });
+  return `<div class="stock-overview">${Object.entries(byCustomer).map(([id, c]) => `
+    <div class="stock-row">
+      <div class="stock-row-header">
+        <span class="stock-row-name">${c.name}</span>
+      </div>
+      <div class="stock-items">
+        ${c.items.map(i => `<span class="stock-pill-admin ${Number(i.Antal) === 0 ? 'low' : Number(i.Antal) <= 3 ? 'low' : ''}">${i.ProduktNamn}: <strong>${i.Antal}</strong></span>`).join('')}
+      </div>
+    </div>
+  `).join('')}</div>`;
+}
+
+function renderAdminProducts() {
+  return `
+    <div class="form-card">
+      <div class="section-title" style="margin-bottom:16px">${t('addProduct')}</div>
+      <div class="field"><label>Namn (SV)</label><input id="np-name" placeholder="Akvarellfärg"></div>
+      <div class="field"><label>Name (EN)</label><input id="np-nameen" placeholder="Watercolor"></div>
+      <div class="field"><label>Streckkod</label><input id="np-barcode" placeholder="73123..."></div>
+      <div class="field"><label>Pris (kr)</label><input id="np-price" type="number" placeholder="89"></div>
+      <div class="field"><label>Kategori</label>
+        <select id="np-cat">
+          <option>Färg</option><option>Penslar</option><option>Papper</option><option>Tillbehör</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="adminAddProduct()">${t('save')}</button>
+    </div>
+    <div class="section-title">Alla produkter</div>
+    ${appData.products.map(p => `
+      <div class="card" style="padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
+        <div style="flex:1">
+          <div style="font-weight:500">${p.Namn}</div>
+          <div style="font-size:0.8rem;color:var(--muted)">${p.NamnEN} · ${p.Pris} kr</div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderAdminCustomers() {
+  return `
+    <div class="form-card">
+      <div class="section-title" style="margin-bottom:16px">${t('addCustomer')}</div>
+      <div class="field"><label>Namn</label><input id="nc-name" placeholder="Jakobsgården"></div>
+      <div class="field"><label>E-post</label><input id="nc-email" type="email" placeholder="info@jakob.se"></div>
+      <div class="field"><label>PIN-kod</label><input id="nc-pin" type="number" placeholder="1234"></div>
+      <div class="field"><label>Swish-referens</label><input id="nc-swish" placeholder="JAK"></div>
+      <button class="btn btn-primary btn-full" onclick="adminAddCustomer()">${t('save')}</button>
+    </div>
+    <div class="section-title">Kunder</div>
+    ${appData.customers.map(c => `
+      <div class="card" style="padding:14px 16px;margin-bottom:8px">
+        <div style="font-weight:500">${c.Namn}</div>
+        <div style="font-size:0.8rem;color:var(--muted)">${c.Email} · Swish: ${c.SwishRef}</div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderAdminSettings() {
+  const url = localStorage.getItem('scriptUrl') || '';
+  const swish = localStorage.getItem('swishNumber') || '';
+  const pin = localStorage.getItem('adminPin') || '0000';
+  return `
+    <div class="form-card">
+      <div class="section-title" style="margin-bottom:16px">Google Apps Script</div>
+      <div class="field"><label>${t('scriptUrl')}</label><input id="set-url" value="${url}" placeholder="https://script.google.com/..."></div>
+      <button class="btn btn-primary btn-full" onclick="saveSettings()">${t('saveUrl')}</button>
+    </div>
+    <div class="form-card">
+      <div class="section-title" style="margin-bottom:16px">Swish</div>
+      <div class="field"><label>Swish-nummer</label><input id="set-swish" value="${swish}" placeholder="070-000 00 00"></div>
+      <button class="btn btn-primary btn-full" onclick="saveSwish()">Spara</button>
+    </div>
+    <div class="form-card">
+      <div class="section-title" style="margin-bottom:16px">Admin PIN</div>
+      <div class="field"><label>Nuvarande PIN</label><input id="set-pin" value="${pin}" type="number"></div>
+      <button class="btn btn-primary btn-full" onclick="saveAdminPin()">Spara PIN</button>
+    </div>
+  `;
+}
+
+function saveSettings() {
+  const url = document.getElementById('set-url').value.trim();
+  localStorage.setItem('scriptUrl', url);
+  toast(t('urlSaved'));
+}
+function saveSwish() {
+  const n = document.getElementById('set-swish').value.trim();
+  localStorage.setItem('swishNumber', n);
+  toast('✓ Sparat');
+}
+function saveAdminPin() {
+  const p = document.getElementById('set-pin').value.trim();
+  localStorage.setItem('adminPin', p);
+  toast('✓ PIN uppdaterad');
+}
+
+async function adminAddProduct() {
+  const name = document.getElementById('np-name').value.trim();
+  const nameEn = document.getElementById('np-nameen').value.trim();
+  const barcode = document.getElementById('np-barcode').value.trim();
+  const price = Number(document.getElementById('np-price').value);
+  const cat = document.getElementById('np-cat').value;
+  if (!name || !price) return toast('Fyll i namn och pris');
+  const id = 'P' + Date.now();
+  appData.products.push({ ProduktID: id, Namn: name, NamnEN: nameEn, Streckkod: barcode, Pris: price, Enhet: 'st', Kategori: cat });
+  appData.customers.forEach(c => {
+    appData.stock.push({ KundID: c.KundID, KundNamn: c.Namn, ProduktID: id, ProduktNamn: name, Antal: 0 });
+  });
+  if (SCRIPT_URL) {
+    try { await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'addProduct', name, nameEn, barcode, price, unit: 'st', category: cat }) }); } catch(e){}
+  }
+  toast('✓ Produkt tillagd');
+  renderAdminContent('products');
+}
+
+async function adminAddCustomer() {
+  const name = document.getElementById('nc-name').value.trim();
+  const email = document.getElementById('nc-email').value.trim();
+  const pin = document.getElementById('nc-pin').value.trim();
+  const swish = document.getElementById('nc-swish').value.trim();
+  if (!name || !pin) return toast('Fyll i namn och PIN');
+  const id = 'C' + Date.now();
+  appData.customers.push({ KundID: id, Namn: name, Email: email, PIN: pin, SwishRef: swish });
+  appData.products.forEach(p => {
+    appData.stock.push({ KundID: id, KundNamn: name, ProduktID: p.ProduktID, ProduktNamn: p.Namn, Antal: 0 });
+  });
+  if (SCRIPT_URL) {
+    try { await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'addCustomer', name, email, pin, swishRef: swish }) }); } catch(e){}
+  }
+  toast('✓ Kund tillagd');
+  renderAdminContent('customers');
+}
+
+async function confirmOrderAdmin(orderId) {
+  const order = appData.orders.find(o => (o.OrderID || o.orderId) === orderId);
+  if (order) order.Status = 'Klar';
+  if (SCRIPT_URL) {
+    try { await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'confirmOrder', orderId, confirmedBy: 'Admin' }) }); } catch(e){}
+  }
+  toast(t('confirmOrder'));
+  renderAdminContent('orders');
+}
+
+// ═══════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════
+function toast(msg, duration = 2200) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ─── Hook up cart render on screen switch ───
+const origShow = window.showScreen;
+window.showScreen = function(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (id !== 'screen-shop' && scannerActive) stopScanner();
+  if (id === 'screen-cart') renderCart();
+  if (id === 'screen-login') renderLoginScreen();
+};
+
+// ─── START ───
+init();
+</script>
+</body>
+</html>
