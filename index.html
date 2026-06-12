@@ -638,6 +638,8 @@ const DISCOUNT = 0.10; // 10% kursgårdsrabatt
 
 // Google Apps Script URL — REPLACE THIS after deploying
 const SCRIPT_URL = localStorage.getItem('scriptUrl') || 'https://script.google.com/macros/s/AKfycbxmFjQddjw8qYLFJEMgj_jC8ywM1d5YcmglEHf5N4ocAffrryKelFvObqlvCC-8i35i/exec';
+const CLOUDINARY_CLOUD = 'dep8unemm';
+const CLOUDINARY_PRESET = 'KG-WSB';
 
 // ── TRANSLATIONS ──
 const T = {
@@ -928,9 +930,10 @@ function renderProductCard(p) {
   const name = lang === 'en' && p.NamnEN ? p.NamnEN : p.Namn;
   const origPrice = Number(p.Pris);
   const discPrice = Math.round(origPrice * (1 - DISCOUNT));
+  const iconHtml = p.Bild ? `<img src="${p.Bild}" style="width:100%;height:100%;object-fit:cover;border-radius:10px">` : icon;
   return `
     <div class="product-card">
-      <div class="product-icon">${icon}</div>
+      <div class="product-icon">${iconHtml}</div>
       <div class="product-info">
         <div class="product-name">${name}</div>
         ${p.NamnEN && lang === 'sv' ? `<div class="product-name-en">${p.NamnEN}</div>` : ''}
@@ -1193,6 +1196,7 @@ async function placeOrder() {
 
 let lastOrder = null;
 let lastOrderOrig = 0;
+let pendingProductImage = '';
 
 function showReceiptScreen(order, total, origTotal) {
   const saved = origTotal - total;
@@ -1360,6 +1364,7 @@ function renderAdminOrders() {
           <div class="order-total">${o.total || o.Total} ${t('kr')}</div>
           <button class="confirm-btn" style="background:#7dbce8;margin-top:8px" onclick="printOrder('${oid}')">🖨 Skriv ut kvitto</button>
           ${showConfirm ? `<button class="confirm-btn" onclick="confirmOrderAdmin('${oid}')">${t('confirmOrder')}</button>` : ''}
+          <button class="confirm-btn" style="background:#ed6840;margin-top:8px" onclick="deleteOrderAdmin('${oid}')">🗑 Radera</button>
         </div>
       </div>
     `;
@@ -1401,18 +1406,27 @@ function renderAdminProducts() {
       <div class="section-title" style="margin-bottom:16px">${t('addProduct')}</div>
       <div class="field"><label>Namn (SV)</label><input id="np-name" placeholder="Akvarellfärg"></div>
       <div class="field"><label>Name (EN)</label><input id="np-nameen" placeholder="Watercolor"></div>
-      <div class="field"><label>Streckkod</label><input id="np-barcode" placeholder="73123..."></div>
+      <div class="field"><label>Streckkod</label><input id="np-barcode" placeholder="73123... (flera: kommaseparerade)"></div>
       <div class="field"><label>Pris (kr)</label><input id="np-price" type="number" placeholder="89"></div>
       <div class="field"><label>Kategori</label>
         <select id="np-cat">
           <option>Färg</option><option>Penslar</option><option>Papper</option><option>Tillbehör</option>
         </select>
       </div>
+      <div class="field">
+        <label>Bild</label>
+        <div id="np-image-preview" style="width:100%;height:140px;border-radius:var(--r);background:var(--cream);display:flex;align-items:center;justify-content:center;margin-bottom:8px;overflow:hidden;color:var(--muted);font-size:0.85rem">
+          Ingen bild vald
+        </div>
+        <input type="file" id="np-image-input" accept="image/*" capture="environment" style="display:none" onchange="handleProductImageSelect(this)">
+        <button class="btn btn-outline btn-full" onclick="document.getElementById('np-image-input').click()">📷 Ta foto / Välj bild</button>
+      </div>
       <button class="btn btn-primary btn-full" onclick="adminAddProduct()">${t('save')}</button>
     </div>
     <div class="section-title">Alla produkter</div>
     ${appData.products.map(p => `
       <div class="card" style="padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
+        ${p.Bild ? `<img src="${p.Bild}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;flex-shrink:0">` : `<div style="width:48px;height:48px;border-radius:10px;background:var(--cream);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">${CATEGORY_ICONS[p.Kategori] || '📦'}</div>`}
         <div style="flex:1">
           <div style="font-weight:500">${p.Namn}</div>
           <div style="font-size:0.8rem;color:var(--muted)">${p.NamnEN} · ${p.Pris} kr</div>
@@ -1481,21 +1495,53 @@ function saveAdminPin() {
   toast('✓ PIN uppdaterad');
 }
 
+async function handleProductImageSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const preview = document.getElementById('np-image-preview');
+  preview.innerHTML = '<div class="spinner" style="width:24px;height:24px;border-width:2px"></div>';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_PRESET);
+
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.secure_url) {
+      pendingProductImage = data.secure_url;
+      preview.innerHTML = `<img src="${data.secure_url}" style="width:100%;height:100%;object-fit:cover">`;
+      toast('✓ Bild uppladdad');
+    } else {
+      preview.innerHTML = 'Uppladdning misslyckades';
+      toast('Kunde inte ladda upp bild');
+    }
+  } catch(e) {
+    preview.innerHTML = 'Uppladdning misslyckades';
+    toast('Fel vid uppladdning: ' + e.message);
+  }
+}
+
 async function adminAddProduct() {
   const name = document.getElementById('np-name').value.trim();
   const nameEn = document.getElementById('np-nameen').value.trim();
   const barcode = document.getElementById('np-barcode').value.trim();
   const price = Number(document.getElementById('np-price').value);
   const cat = document.getElementById('np-cat').value;
+  const image = pendingProductImage;
   if (!name || !price) return toast('Fyll i namn och pris');
   const id = 'P' + Date.now();
-  appData.products.push({ ProduktID: id, Namn: name, NamnEN: nameEn, Streckkod: barcode, Pris: price, Enhet: 'st', Kategori: cat });
+  appData.products.push({ ProduktID: id, Namn: name, NamnEN: nameEn, Streckkod: barcode, Pris: price, Enhet: 'st', Kategori: cat, Bild: image });
   appData.customers.forEach(c => {
     appData.stock.push({ KundID: c.KundID, KundNamn: c.Namn, ProduktID: id, ProduktNamn: name, Antal: 0 });
   });
   if (SCRIPT_URL) {
-    try { await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'addProduct', name, nameEn, barcode, price, unit: 'st', category: cat }) }); } catch(e){}
+    try { await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'addProduct', name, nameEn, barcode, price, unit: 'st', category: cat, image }) }); } catch(e){}
   }
+  pendingProductImage = '';
   toast('✓ Produkt tillagd');
   renderAdminContent('products');
 }
@@ -1516,6 +1562,16 @@ async function adminAddCustomer() {
   }
   toast('✓ Kund tillagd');
   renderAdminContent('customers');
+}
+
+async function deleteOrderAdmin(orderId) {
+  if (!confirm('Radera denna order permanent?')) return;
+  appData.orders = appData.orders.filter(o => (o.OrderID || o.orderId) !== orderId);
+  if (SCRIPT_URL) {
+    try { await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteOrder', orderId }) }); } catch(e){}
+  }
+  toast('🗑 Order raderad');
+  renderAdminContent('orders');
 }
 
 async function confirmOrderAdmin(orderId) {
