@@ -6,7 +6,7 @@
 <title>Färgbutik — Självbetjäning</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
 <style>
   :root {
     --ink: #2d3a42;
@@ -1010,31 +1010,95 @@ function updateCartBar() {
   document.getElementById('cart-btn-label').textContent = t('checkout');
 }
 
-// ─── SCANNER ───
-function startScanner() {
+// ─── SCANNER (ZXing) ───
+let zxingReader = null;
+let lastScannedCode = '';
+let lastScannedTime = 0;
+
+async function startScanner() {
   if (scannerActive) return;
   scannerActive = true;
-  Quagga.init({
-    inputStream: { name: 'Live', type: 'LiveStream', target: document.getElementById('scanner-container'), constraints: { facingMode: 'environment' } },
-    decoder: { readers: ['ean_reader', 'ean_8_reader', 'code_128_reader'] }
-  }, err => {
-    if (!err) Quagga.start();
-  });
-  Quagga.onDetected(result => {
-    const code = result.codeResult.code;
-    const product = appData.products.find(p => p.Streckkod === code);
-    if (product) {
-      changeQty(product.ProduktID, 1);
-      toast(`+ ${lang === 'en' && product.NamnEN ? product.NamnEN : product.Namn}`);
-      const el = document.getElementById('scanned-results');
-      if (el) el.innerHTML = renderProductCard(product);
-    }
-  });
+
+  try {
+    const hints = new Map();
+    const formats = [
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E,
+    ];
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+    zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+
+    const container = document.getElementById('scanner-container');
+    const video = document.createElement('video');
+    video.style.width = '100%';
+    video.style.display = 'block';
+    container.appendChild(video);
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = stream;
+    video.setAttribute('playsinline', true);
+    await video.play();
+
+    zxingReader.decodeFromVideoElement(video, (result, err) => {
+      if (result) {
+        const code = result.getText();
+        const now = Date.now();
+        // Debounce — ignore same code within 2 seconds
+        if (code === lastScannedCode && now - lastScannedTime < 2000) return;
+        lastScannedCode = code;
+        lastScannedTime = now;
+
+        const product = appData.products.find(p => {
+          const codes = String(p.Streckkod).split(',').map(c => c.trim());
+          return codes.includes(String(code).trim());
+        });
+        if (product) {
+          changeQty(product.ProduktID, 1);
+          toast('+ ' + (lang === 'en' && product.NamnEN ? product.NamnEN : product.Namn));
+          const el = document.getElementById('scanned-results');
+          if (el) el.innerHTML = renderProductCard(product);
+          // Vibrate on success
+          if (navigator.vibrate) navigator.vibrate(100);
+        } else {
+          toast('Streckkod: ' + code + ' — ej i sortimentet');
+        }
+      }
+    });
+  } catch(e) {
+    toast('Kameran kunde inte starta: ' + e.message);
+    scannerActive = false;
+  }
 }
+
 function stopScanner() {
   if (!scannerActive) return;
-  try { Quagga.stop(); } catch(e){}
+  try {
+    if (zxingReader) {
+      zxingReader.reset();
+      zxingReader = null;
+    }
+    // Stop all video tracks
+    const container = document.getElementById('scanner-container');
+    if (container) {
+      const videos = container.querySelectorAll('video');
+      videos.forEach(v => {
+        if (v.srcObject) {
+          v.srcObject.getTracks().forEach(t => t.stop());
+        }
+        v.remove();
+      });
+    }
+  } catch(e) {}
   scannerActive = false;
+  lastScannedCode = '';
 }
 
 // ═══════════════════════════════════════════════
