@@ -1383,21 +1383,80 @@ function renderAdminOrders() {
 }
 
 function renderAdminStock() {
+  const customerOptions = appData.customers.map(c => '<option value="' + c.KundID + '">' + c.Namn + '</option>').join('');
+  const productOptions = appData.products.map(p => '<option value="' + p.ProduktID + '">' + p.Namn + '</option>').join('');
+
   const byCustomer = {};
   appData.customers.forEach(c => { byCustomer[c.KundID] = { name: c.Namn, items: [] }; });
   appData.stock.forEach(s => {
     if (byCustomer[s.KundID]) byCustomer[s.KundID].items.push(s);
   });
-  return `<div class="stock-overview">${Object.entries(byCustomer).map(([id, c]) => `
-    <div class="stock-row">
-      <div class="stock-row-header">
-        <span class="stock-row-name">${c.name}</span>
-      </div>
-      <div class="stock-items">
-        ${c.items.map(i => `<span class="stock-pill-admin ${Number(i.Antal) === 0 ? 'low' : Number(i.Antal) <= 3 ? 'low' : ''}">${i.ProduktNamn}: <strong>${i.Antal}</strong></span>`).join('')}
-      </div>
+
+  const overviewHtml = Object.entries(byCustomer).map(([id, c]) => {
+    const pills = c.items.length === 0
+      ? '<span style="color:var(--muted);font-size:0.85rem">Inga produkter</span>'
+      : c.items.map(i => '<span class="stock-pill-admin ' + (Number(i.Antal) <= 3 ? 'low' : '') + '" onclick="prefillStock('' + id + '','' + i.ProduktID + '')" style="cursor:pointer">' + i.ProduktNamn + ': <strong>' + i.Antal + '</strong></span>').join('');
+    return '<div class="stock-row"><div class="stock-row-header"><span class="stock-row-name">' + c.name + '</span></div><div class="stock-items">' + pills + '</div></div>';
+  }).join('');
+
+  return `
+    <div class="form-card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:16px">Fyll på lager</div>
+      <div class="field"><label>Kund</label><select id="sl-customer" onchange="updateCurrentStock()">${customerOptions}</select></div>
+      <div class="field"><label>Produkt</label><select id="sl-product" onchange="updateCurrentStock()">${productOptions}</select></div>
+      <div id="sl-current" style="font-size:0.85rem;color:var(--muted);margin-bottom:12px;padding:8px 12px;background:var(--cream);border-radius:8px">Välj kund och produkt</div>
+      <div class="field"><label>Nytt antal i lager</label><input type="number" id="sl-qty" placeholder="0" min="0" style="font-size:1.1rem"></div>
+      <button class="btn btn-primary btn-full" onclick="adminSetStock()">💾 Spara lager</button>
     </div>
-  `).join('')}</div>`;
+    <div class="section-title" style="margin-bottom:12px">Lageröversikt — tryck på en produkt för att redigera</div>
+    <div class="stock-overview">${overviewHtml}</div>
+  `;
+}
+
+function updateCurrentStock() {
+  const custId = document.getElementById('sl-customer') && document.getElementById('sl-customer').value;
+  const prodId = document.getElementById('sl-product') && document.getElementById('sl-product').value;
+  if (!custId || !prodId) return;
+  const row = appData.stock.find(s => s.KundID === custId && s.ProduktID === prodId);
+  const current = row ? Number(row.Antal) : 0;
+  const el = document.getElementById('sl-current');
+  if (el) el.textContent = 'Nuvarande lager: ' + current + ' st';
+  const qty = document.getElementById('sl-qty');
+  if (qty) qty.value = current;
+}
+
+function prefillStock(custId, prodId) {
+  const custSel = document.getElementById('sl-customer');
+  const prodSel = document.getElementById('sl-product');
+  if (custSel) custSel.value = custId;
+  if (prodSel) prodSel.value = prodId;
+  updateCurrentStock();
+  document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function adminSetStock() {
+  const custId = document.getElementById('sl-customer').value;
+  const prodId = document.getElementById('sl-product').value;
+  const qty = Number(document.getElementById('sl-qty').value);
+  if (!custId || !prodId || isNaN(qty) || qty < 0) return toast('Fyll i alla fält');
+
+  const row = appData.stock.find(s => s.KundID === custId && s.ProduktID === prodId);
+  if (row) {
+    row.Antal = qty;
+  } else {
+    const cust = appData.customers.find(c => c.KundID === custId);
+    const prod = appData.products.find(p => p.ProduktID === prodId);
+    appData.stock.push({ KundID: custId, KundNamn: cust ? cust.Namn : '', ProduktID: prodId, ProduktNamn: prod ? prod.Namn : '', Antal: qty });
+  }
+
+  if (SCRIPT_URL) {
+    try {
+      await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'setStock', customerId: custId, productId: prodId, quantity: qty }) });
+    } catch(e) {}
+  }
+
+  toast('✓ Lager uppdaterat');
+  renderAdminContent('stock');
 }
 
 function renderAdminProducts() {
