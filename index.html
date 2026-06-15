@@ -1409,7 +1409,7 @@ function renderAdminStock() {
   const overviewHtml = Object.entries(byCustomer).map(([id, c]) => {
     const pills = c.items.length === 0
       ? '<span style="color:var(--muted);font-size:0.85rem">Inga produkter</span>'
-      : c.items.map(i => '<span class="stock-pill-admin ' + (Number(i.Antal) <= 3 ? 'low' : '') + '" onclick="prefillStock('' + id + '','' + i.ProduktID + '')" style="cursor:pointer">' + i.ProduktNamn + ': <strong>' + i.Antal + '</strong></span>').join('');
+      : c.items.map(function(i) { return '<span class="stock-pill-admin ' + (Number(i.Antal) <= 3 ? "low" : "") + '" data-cid="' + id + '" data-pid="' + i.ProduktID + '" onclick="prefillStock(this.dataset.cid, this.dataset.pid)" style="cursor:pointer">' + i.ProduktNamn + ': <strong>' + i.Antal + '</strong></span>'; }).join('');
     return '<div class="stock-row"><div class="stock-row-header"><span class="stock-row-name">' + c.name + '</span></div><div class="stock-items">' + pills + '</div></div>';
   }).join('');
 
