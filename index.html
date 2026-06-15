@@ -713,21 +713,35 @@ const t = (k) => (T[lang] || T.sv)[k] || k;
 // ═══════════════════════════════════════════════
 async function init() {
   document.getElementById('loading-text').textContent = t('loading');
+
+  // Failsafe — hide loading after 8 seconds no matter what
+  const failsafe = setTimeout(() => {
+    document.getElementById('loading').style.display = 'none';
+    toast('Anslutning tog lång tid — laddar om...');
+  }, 8000);
+
   if (!SCRIPT_URL) {
-    // No URL yet — use demo data
     appData = getDemoData();
+    clearTimeout(failsafe);
     document.getElementById('loading').style.display = 'none';
     return;
   }
   try {
     const res = await fetch(SCRIPT_URL);
     const data = await res.json();
-    if (data.products) appData = data;
-    else appData = getDemoData();
+    if (data.products) {
+      appData = data;
+      if (!appData.stock) appData.stock = [];
+      if (!appData.orders) appData.orders = [];
+      if (!appData.customers) appData.customers = [];
+    } else {
+      appData = getDemoData();
+    }
   } catch (e) {
     appData = getDemoData();
     toast('Offline — använder lokal data');
   }
+  clearTimeout(failsafe);
   document.getElementById('loading').style.display = 'none';
 }
 
