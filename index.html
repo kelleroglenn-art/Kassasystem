@@ -1134,13 +1134,13 @@ function scanLoop() {
     const vh = scanVideoEl.videoHeight;
 
     const cropW = vw;
-    const cropH = Math.round(vh * 0.5);
+    const cropH = vh;
     const cropX = 0;
-    const cropY = Math.round((vh - cropH) / 2);
+    const cropY = 0;
 
     scanCanvas.width = cropW;
     scanCanvas.height = cropH;
-    scanCtx.drawImage(scanVideoEl, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    scanCtx.drawImage(scanVideoEl, 0, 0, cropW, cropH);
 
     try {
       const imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
