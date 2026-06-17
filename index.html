@@ -919,6 +919,9 @@ function renderShopContent() {
   } else if (currentShopTab === 'scan') {
     el.innerHTML = `
       <div id="scanner-container"><div class="scan-line"></div></div>
+      <div style="display:flex;justify-content:center;margin-bottom:8px">
+        <button class="btn btn-outline" id="torch-btn" style="display:none" onclick="toggleTorch()">🔦 Belysning</button>
+      </div>
       <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin-bottom:16px">${t('scanHint')}</p>
       <div class="product-grid" id="scanned-results"></div>
     `;
@@ -1027,10 +1030,17 @@ function updateCartBar() {
   document.getElementById('cart-btn-label').textContent = t('checkout');
 }
 
-// ─── SCANNER (ZXing) ───
+// ─── SCANNER (ZXing — manual canvas scan loop for iOS reliability) ───
 let zxingReader = null;
 let lastScannedCode = '';
 let lastScannedTime = 0;
+let scanAnimationFrame = null;
+let scanCanvas = null;
+let scanCtx = null;
+let scanVideoEl = null;
+
+let currentStream = null;
+let torchOn = false;
 
 async function startScanner() {
   if (scannerActive) return;
@@ -1055,54 +1065,126 @@ async function startScanner() {
     const video = document.createElement('video');
     video.style.width = '100%';
     video.style.display = 'block';
+    video.setAttribute('playsinline', true);
+    video.setAttribute('muted', true);
+    video.muted = true;
     container.appendChild(video);
+    scanVideoEl = video;
 
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
+    currentStream = stream;
     video.srcObject = stream;
-    video.setAttribute('playsinline', true);
     await video.play();
 
-    zxingReader.decodeFromVideoElement(video, (result, err) => {
-      if (result) {
-        const code = result.getText();
-        const now = Date.now();
-        // Debounce — ignore same code within 2 seconds
-        if (code === lastScannedCode && now - lastScannedTime < 2000) return;
-        lastScannedCode = code;
-        lastScannedTime = now;
-
-        const product = appData.products.find(p => {
-          const codes = String(p.Streckkod).split(',').map(c => c.trim());
-          return codes.includes(String(code).trim());
-        });
-        if (product) {
-          changeQty(product.ProduktID, 1);
-          toast('+ ' + (lang === 'en' && product.NamnEN ? product.NamnEN : product.Namn));
-          const el = document.getElementById('scanned-results');
-          if (el) el.innerHTML = renderProductCard(product);
-          // Vibrate on success
-          if (navigator.vibrate) navigator.vibrate(100);
-        } else {
-          toast('Streckkod: ' + code + ' — ej i sortimentet');
-        }
-      }
+    // Wait for video to actually have dimensions
+    await new Promise(resolve => {
+      if (video.videoWidth > 0) return resolve();
+      video.onloadedmetadata = () => resolve();
     });
+
+    // Show torch button if supported
+    try {
+      const track = stream.getVideoTracks()[0];
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+      if (capabilities.torch) {
+        document.getElementById('torch-btn').style.display = 'inline-flex';
+      }
+    } catch(e) {}
+
+    scanCanvas = document.createElement('canvas');
+    scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+
+    scanLoop();
   } catch(e) {
     toast('Kameran kunde inte starta: ' + e.message);
     scannerActive = false;
   }
 }
 
+async function toggleTorch() {
+  if (!currentStream) return;
+  try {
+    const track = currentStream.getVideoTracks()[0];
+    torchOn = !torchOn;
+    await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    toast(torchOn ? '🔦 Belysning på' : 'Belysning av');
+  } catch(e) {
+    toast('Belysning stöds inte på denna enhet');
+  }
+}
+
+function scanLoop() {
+  if (!scannerActive || !scanVideoEl) return;
+
+  if (scanVideoEl.readyState === scanVideoEl.HAVE_ENOUGH_DATA && scanVideoEl.videoWidth > 0) {
+    const vw = scanVideoEl.videoWidth;
+    const vh = scanVideoEl.videoHeight;
+
+    // Crop to a centered horizontal band — barcodes are usually scanned roughly centered,
+    // and a smaller region is both faster and more reliable to decode.
+    const cropW = vw;
+    const cropH = Math.round(vh * 0.5);
+    const cropX = 0;
+    const cropY = Math.round((vh - cropH) / 2);
+
+    scanCanvas.width = cropW;
+    scanCanvas.height = cropH;
+    scanCtx.drawImage(scanVideoEl, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+    try {
+      const imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+      const len = imageData.width * imageData.height;
+      const luminances = new Uint8ClampedArray(len);
+      const data = imageData.data;
+      for (let i = 0, j = 0; i < len; i++, j += 4) {
+        luminances[i] = (data[j] * 0.299 + data[j+1] * 0.587 + data[j+2] * 0.114);
+      }
+      const luminanceSource = new ZXing.RGBLuminanceSource(luminances, imageData.width, imageData.height);
+      const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
+      const result = zxingReader.decode(binaryBitmap);
+
+      if (result) {
+        handleScanResult(result.getText());
+      }
+    } catch (err) {
+      // No code found in this frame — totally normal, just keep scanning
+    }
+  }
+
+  scanAnimationFrame = requestAnimationFrame(scanLoop);
+}
+
+function handleScanResult(code) {
+  const now = Date.now();
+  if (code === lastScannedCode && now - lastScannedTime < 2000) return;
+  lastScannedCode = code;
+  lastScannedTime = now;
+
+  const product = appData.products.find(p => {
+    const codes = String(p.Streckkod).split(',').map(c => c.trim());
+    return codes.includes(String(code).trim());
+  });
+  if (product) {
+    changeQty(product.ProduktID, 1);
+    toast('+ ' + (lang === 'en' && product.NamnEN ? product.NamnEN : product.Namn));
+    const el = document.getElementById('scanned-results');
+    if (el) el.innerHTML = renderProductCard(product);
+    if (navigator.vibrate) navigator.vibrate(100);
+  } else {
+    toast('Streckkod: ' + code + ' — ej i sortimentet');
+  }
+}
+
 function stopScanner() {
   if (!scannerActive) return;
+  scannerActive = false;
   try {
-    if (zxingReader) {
-      zxingReader.reset();
-      zxingReader = null;
+    if (scanAnimationFrame) {
+      cancelAnimationFrame(scanAnimationFrame);
+      scanAnimationFrame = null;
     }
-    // Stop all video tracks
     const container = document.getElementById('scanner-container');
     if (container) {
       const videos = container.querySelectorAll('video');
@@ -1113,8 +1195,15 @@ function stopScanner() {
         v.remove();
       });
     }
+    scanVideoEl = null;
+    scanCanvas = null;
+    scanCtx = null;
+    zxingReader = null;
+    currentStream = null;
+    torchOn = false;
+    const torchBtn = document.getElementById('torch-btn');
+    if (torchBtn) torchBtn.style.display = 'none';
   } catch(e) {}
-  scannerActive = false;
   lastScannedCode = '';
 }
 
@@ -1473,7 +1562,10 @@ async function adminSetStock() {
   renderAdminContent('stock');
 }
 
+const PRODUCT_CATEGORIES = ['Färg', 'Verktyg', 'Material', 'Penslar', 'Papper', 'Tillbehör'];
+
 function renderAdminProducts() {
+  const catOptions = PRODUCT_CATEGORIES.map(c => '<option>' + c + '</option>').join('');
   return `
     <div class="form-card">
       <div class="section-title" style="margin-bottom:16px">${t('addProduct')}</div>
@@ -1482,9 +1574,7 @@ function renderAdminProducts() {
       <div class="field"><label>Streckkod</label><input id="np-barcode" placeholder="73123... (flera: kommaseparerade)"></div>
       <div class="field"><label>Pris (kr)</label><input id="np-price" type="number" placeholder="89"></div>
       <div class="field"><label>Kategori</label>
-        <select id="np-cat">
-          <option>Färg</option><option>Penslar</option><option>Papper</option><option>Tillbehör</option>
-        </select>
+        <select id="np-cat">${catOptions}</select>
       </div>
       <div class="field">
         <label>Bild</label>
@@ -1496,17 +1586,120 @@ function renderAdminProducts() {
       </div>
       <button class="btn btn-primary btn-full" onclick="adminAddProduct()">${t('save')}</button>
     </div>
-    <div class="section-title">Alla produkter</div>
+    <div class="section-title">Alla produkter (${appData.products.length})</div>
     ${appData.products.map(p => `
       <div class="card" style="padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
         ${p.Bild ? `<img src="${p.Bild}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;flex-shrink:0">` : `<div style="width:48px;height:48px;border-radius:10px;background:var(--cream);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">${CATEGORY_ICONS[p.Kategori] || '📦'}</div>`}
-        <div style="flex:1">
+        <div style="flex:1;min-width:0">
           <div style="font-weight:500">${p.Namn}</div>
           <div style="font-size:0.8rem;color:var(--muted)">${p.NamnEN} · ${p.Pris} kr</div>
         </div>
+        <button class="qty-btn" onclick="editProduct('${p.ProduktID}')" title="Redigera" style="flex-shrink:0">✏️</button>
+        <button class="qty-btn" onclick="deleteProduct('${p.ProduktID}')" title="Ta bort" style="flex-shrink:0;color:#ed6840">✕</button>
       </div>
     `).join('')}
+
+    <!-- Edit product modal -->
+    <div id="edit-product-overlay" style="display:none;position:fixed;inset:0;background:rgba(26,42,56,0.6);z-index:9500;align-items:flex-end;justify-content:center">
+      <div style="background:#fff;border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">
+        <div style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:16px">Redigera produkt</div>
+        <input type="hidden" id="ep-id">
+        <div class="field"><label>Namn (SV)</label><input id="ep-name"></div>
+        <div class="field"><label>Name (EN)</label><input id="ep-nameen"></div>
+        <div class="field"><label>Streckkod</label><input id="ep-barcode"></div>
+        <div class="field"><label>Pris (kr)</label><input id="ep-price" type="number"></div>
+        <div class="field"><label>Kategori</label><select id="ep-cat">${catOptions}</select></div>
+        <div class="field">
+          <label>Bild</label>
+          <div id="ep-image-preview" style="width:100%;height:140px;border-radius:var(--r);background:var(--cream);display:flex;align-items:center;justify-content:center;margin-bottom:8px;overflow:hidden;color:var(--muted);font-size:0.85rem">Ingen bild</div>
+          <input type="file" id="ep-image-input" accept="image/*" capture="environment" style="display:none" onchange="handleEditImageSelect(this)">
+          <button class="btn btn-outline btn-full" onclick="document.getElementById('ep-image-input').click()">📷 Byt bild</button>
+        </div>
+        <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="saveEditedProduct()">${t('save')}</button>
+        <button class="btn btn-outline btn-full" style="margin-top:8px" onclick="closeEditProduct()">${t('cancel')}</button>
+      </div>
+    </div>
   `;
+}
+
+let pendingEditImage = '';
+
+function editProduct(id) {
+  const p = appData.products.find(x => x.ProduktID === id);
+  if (!p) return;
+  document.getElementById('ep-id').value = p.ProduktID;
+  document.getElementById('ep-name').value = p.Namn;
+  document.getElementById('ep-nameen').value = p.NamnEN || '';
+  document.getElementById('ep-barcode').value = p.Streckkod || '';
+  document.getElementById('ep-price').value = p.Pris;
+  document.getElementById('ep-cat').value = p.Kategori || 'Tillbehör';
+  pendingEditImage = p.Bild || '';
+  const preview = document.getElementById('ep-image-preview');
+  preview.innerHTML = p.Bild ? `<img src="${p.Bild}" style="width:100%;height:100%;object-fit:cover">` : 'Ingen bild';
+  document.getElementById('edit-product-overlay').style.display = 'flex';
+}
+
+function closeEditProduct() {
+  document.getElementById('edit-product-overlay').style.display = 'none';
+  pendingEditImage = '';
+}
+
+async function handleEditImageSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const preview = document.getElementById('ep-image-preview');
+  preview.innerHTML = '<div class="spinner" style="width:24px;height:24px;border-width:2px"></div>';
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_PRESET);
+    const res = await fetch('https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD + '/image/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.secure_url) {
+      pendingEditImage = data.secure_url;
+      preview.innerHTML = '<img src="' + data.secure_url + '" style="width:100%;height:100%;object-fit:cover">';
+      toast('✓ Bild uppladdad');
+    } else {
+      toast('Kunde inte ladda upp bild');
+    }
+  } catch(e) {
+    toast('Fel vid uppladdning');
+  }
+}
+
+async function saveEditedProduct() {
+  const id = document.getElementById('ep-id').value;
+  const p = appData.products.find(x => x.ProduktID === id);
+  if (!p) return;
+  p.Namn = document.getElementById('ep-name').value.trim();
+  p.NamnEN = document.getElementById('ep-nameen').value.trim();
+  p.Streckkod = document.getElementById('ep-barcode').value.trim();
+  p.Pris = Number(document.getElementById('ep-price').value);
+  p.Kategori = document.getElementById('ep-cat').value;
+  p.Bild = pendingEditImage;
+
+  if (SCRIPT_URL) {
+    try {
+      await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({
+        action: 'updateProduct', productId: id, name: p.Namn, nameEn: p.NamnEN,
+        barcode: p.Streckkod, price: p.Pris, category: p.Kategori, image: p.Bild
+      })});
+    } catch(e) {}
+  }
+  toast('✓ Produkt uppdaterad');
+  closeEditProduct();
+  renderAdminContent('products');
+}
+
+async function deleteProduct(id) {
+  if (!confirm('Ta bort denna produkt permanent? Detta påverkar även lagerdata.')) return;
+  appData.products = appData.products.filter(p => p.ProduktID !== id);
+  appData.stock = appData.stock.filter(s => s.ProduktID !== id);
+  if (SCRIPT_URL) {
+    try { await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteProduct', productId: id }) }); } catch(e){}
+  }
+  toast('🗑 Produkt borttagen');
+  renderAdminContent('products');
 }
 
 function renderAdminCustomers() {
