@@ -1049,6 +1049,7 @@ async function startScanner() {
   scanFrameCount = 0;
   scanNotFoundCount = 0;
   scanLastError = '';
+  scanDecodeBusy = false;
 
   try {
     const hints = new Map();
@@ -1122,51 +1123,44 @@ async function toggleTorch() {
 let scanFrameCount = 0;
 let scanNotFoundCount = 0;
 let scanLastError = '';
+let scanDecodeBusy = false;
 
 function scanLoop() {
   if (!scannerActive || !scanVideoEl) return;
 
   const debugEl = document.getElementById('scan-debug');
 
-  if (scanVideoEl.readyState === scanVideoEl.HAVE_ENOUGH_DATA && scanVideoEl.videoWidth > 0) {
+  if (scanVideoEl.readyState === scanVideoEl.HAVE_ENOUGH_DATA && scanVideoEl.videoWidth > 0 && !scanDecodeBusy) {
     scanFrameCount++;
     const vw = scanVideoEl.videoWidth;
     const vh = scanVideoEl.videoHeight;
 
-    const cropW = vw;
-    const cropH = vh;
-    const cropX = 0;
-    const cropY = 0;
+    scanCanvas.width = vw;
+    scanCanvas.height = vh;
+    scanCtx.drawImage(scanVideoEl, 0, 0, vw, vh);
 
-    scanCanvas.width = cropW;
-    scanCanvas.height = cropH;
-    scanCtx.drawImage(scanVideoEl, 0, 0, cropW, cropH);
-
-    try {
-      const imageData = scanCtx.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-      const len = imageData.width * imageData.height;
-      const luminances = new Uint8ClampedArray(len);
-      const data = imageData.data;
-      for (let i = 0, j = 0; i < len; i++, j += 4) {
-        luminances[i] = (data[j] * 0.299 + data[j+1] * 0.587 + data[j+2] * 0.114);
-      }
-      const luminanceSource = new ZXing.RGBLuminanceSource(luminances, imageData.width, imageData.height);
-      const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
-      const result = zxingReader.decode(binaryBitmap);
-
-      if (result) {
-        handleScanResult(result.getText());
-      }
-    } catch (err) {
-      scanNotFoundCount++;
-      scanLastError = err && err.name ? err.name : String(err).slice(0, 30);
+    scanDecodeBusy = true;
+    if (typeof zxingReader.decodeFromCanvas !== 'function') {
+      scanLastError = 'decodeFromCanvas saknas i ZXing-version';
+      scanDecodeBusy = false;
+    } else {
+      zxingReader.decodeFromCanvas(scanCanvas)
+        .then(result => {
+          scanDecodeBusy = false;
+          if (result) handleScanResult(result.getText());
+        })
+        .catch(err => {
+          scanDecodeBusy = false;
+          scanNotFoundCount++;
+          scanLastError = (err && err.name ? err.name : String(err)).slice(0, 40);
+        });
     }
 
-    if (debugEl && scanFrameCount % 5 === 0) {
+    if (debugEl && scanFrameCount % 3 === 0) {
       debugEl.textContent = 'frames:' + scanFrameCount + ' video:' + vw + 'x' + vh + ' lastErr:' + scanLastError;
     }
   } else if (debugEl) {
-    debugEl.textContent = 'väntar på video... readyState=' + (scanVideoEl ? scanVideoEl.readyState : 'null');
+    debugEl.textContent = 'väntar... readyState=' + (scanVideoEl ? scanVideoEl.readyState : 'null') + ' busy=' + scanDecodeBusy;
   }
 
   scanAnimationFrame = requestAnimationFrame(scanLoop);
