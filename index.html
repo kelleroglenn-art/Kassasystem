@@ -922,6 +922,7 @@ function renderShopContent() {
       <div style="display:flex;justify-content:center;margin-bottom:8px">
         <button class="btn btn-outline" id="torch-btn" style="display:none" onclick="toggleTorch()">🔦 Belysning</button>
       </div>
+      <div id="scan-debug" style="text-align:center;font-size:0.72rem;color:var(--muted);margin-bottom:8px;font-family:monospace"></div>
       <p style="text-align:center;color:var(--muted);font-size:0.9rem;margin-bottom:16px">${t('scanHint')}</p>
       <div class="product-grid" id="scanned-results"></div>
     `;
@@ -1045,6 +1046,9 @@ let torchOn = false;
 async function startScanner() {
   if (scannerActive) return;
   scannerActive = true;
+  scanFrameCount = 0;
+  scanNotFoundCount = 0;
+  scanLastError = '';
 
   try {
     const hints = new Map();
@@ -1115,15 +1119,20 @@ async function toggleTorch() {
   }
 }
 
+let scanFrameCount = 0;
+let scanNotFoundCount = 0;
+let scanLastError = '';
+
 function scanLoop() {
   if (!scannerActive || !scanVideoEl) return;
 
+  const debugEl = document.getElementById('scan-debug');
+
   if (scanVideoEl.readyState === scanVideoEl.HAVE_ENOUGH_DATA && scanVideoEl.videoWidth > 0) {
+    scanFrameCount++;
     const vw = scanVideoEl.videoWidth;
     const vh = scanVideoEl.videoHeight;
 
-    // Crop to a centered horizontal band — barcodes are usually scanned roughly centered,
-    // and a smaller region is both faster and more reliable to decode.
     const cropW = vw;
     const cropH = Math.round(vh * 0.5);
     const cropX = 0;
@@ -1149,8 +1158,15 @@ function scanLoop() {
         handleScanResult(result.getText());
       }
     } catch (err) {
-      // No code found in this frame — totally normal, just keep scanning
+      scanNotFoundCount++;
+      scanLastError = err && err.name ? err.name : String(err).slice(0, 30);
     }
+
+    if (debugEl && scanFrameCount % 5 === 0) {
+      debugEl.textContent = 'frames:' + scanFrameCount + ' video:' + vw + 'x' + vh + ' lastErr:' + scanLastError;
+    }
+  } else if (debugEl) {
+    debugEl.textContent = 'väntar på video... readyState=' + (scanVideoEl ? scanVideoEl.readyState : 'null');
   }
 
   scanAnimationFrame = requestAnimationFrame(scanLoop);
