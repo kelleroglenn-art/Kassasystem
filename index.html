@@ -11,7 +11,10 @@
   // Verify ZXing actually loaded with the classes we need, before the app tries to use it.
   window.__zxingLoadStatus = (function() {
     if (typeof ZXing === 'undefined') return 'ZXing global missing entirely';
-    if (typeof ZXing.BrowserMultiFormatReader !== 'function') return 'BrowserMultiFormatReader missing from ZXing';
+    if (typeof ZXing.MultiFormatReader !== 'function') return 'MultiFormatReader missing from ZXing';
+    if (typeof ZXing.RGBLuminanceSource !== 'function') return 'RGBLuminanceSource missing from ZXing';
+    if (typeof ZXing.BinaryBitmap !== 'function') return 'BinaryBitmap missing from ZXing';
+    if (typeof ZXing.HybridBinarizer !== 'function') return 'HybridBinarizer missing from ZXing';
     return 'ok';
   })();
 </script>
@@ -1039,22 +1042,29 @@ function updateCartBar() {
   document.getElementById('cart-btn-label').textContent = t('checkout');
 }
 
-// ─── SCANNER (ZXing native continuous decode — same approach as the painter order app) ───
+// ─── SCANNER (we own the camera + loop fully — ZXing used only as a pure per-frame decoder) ───
 let zxingReader = null;
 let lastScannedCode = '';
 let lastScannedTime = 0;
 let scanVideoEl = null;
-
 let currentStream = null;
 let torchOn = false;
 let scanFrameCount = 0;
 let scanLastError = '';
+let scanPaused = false;
+let scanCanvas = null;
+let scanCtx = null;
+let scanRAF = null;
+let scanGeneration = 0; // bumped on every stop — stale loops check this and self-terminate
 
 async function startScanner() {
   if (scannerActive) return;
   scannerActive = true;
   scanFrameCount = 0;
   scanLastError = '';
+  scanPaused = false;
+  scanGeneration++;
+  const myGeneration = scanGeneration;
 
   const debugEl = document.getElementById('scan-debug');
 
@@ -1075,8 +1085,9 @@ async function startScanner() {
       ZXing.BarcodeFormat.UPC_A,
       ZXing.BarcodeFormat.UPC_E,
     ]);
-
-    zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    zxingReader = new ZXing.MultiFormatReader();
+    zxingReader.setHints(hints);
 
     const container = document.getElementById('scanner-container');
     const video = document.createElement('video');
@@ -1088,51 +1099,88 @@ async function startScanner() {
     container.appendChild(video);
     scanVideoEl = video;
 
-    const constraints = {
-      video: { facingMode: { ideal: 'environment' } }
-    };
-
-    // decodeFromConstraints handles getUserMedia + the continuous scan loop internally —
-    // this is ZXing's own native continuous-scan API.
-    zxingReader.decodeFromConstraints(constraints, video, (result, err) => {
-      // Hard guard — ignore everything if scanner has been stopped,
-      // in case ZXing's internal loop keeps firing after .stop() was called.
-      if (!scannerActive) return;
-
-      scanFrameCount++;
-      if (result) {
-        handleScanResult(result.getText());
-      }
-      if (err && err.name && err.name !== 'NotFoundException') {
-        scanLastError = err.name;
-      }
-      if (debugEl && scanFrameCount % 10 === 0) {
-        debugEl.textContent = 'scans:' + scanFrameCount + ' lastErr:' + (scanLastError || 'inga (normalt)');
-      }
-    }).then(controls => {
-      zxingControls = controls;
-      // Try to expose torch button if supported
-      try {
-        const stream = video.srcObject;
-        currentStream = stream;
-        const track = stream.getVideoTracks()[0];
-        const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-        if (capabilities.torch) {
-          document.getElementById('torch-btn').style.display = 'inline-flex';
-        }
-      } catch(e) {}
-    }).catch(e => {
-      toast('Kunde inte starta skanning: ' + e.message);
-      scannerActive = false;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
     });
 
+    // If stopScanner() was called while we were awaiting getUserMedia, abort cleanly.
+    if (myGeneration !== scanGeneration) {
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+
+    currentStream = stream;
+    video.srcObject = stream;
+    await video.play();
+
+    await new Promise(resolve => {
+      if (video.videoWidth > 0) return resolve();
+      video.onloadedmetadata = () => resolve();
+    });
+
+    if (myGeneration !== scanGeneration) {
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+
+    try {
+      const track = stream.getVideoTracks()[0];
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+      if (capabilities.torch) {
+        document.getElementById('torch-btn').style.display = 'inline-flex';
+      }
+    } catch(e) {}
+
+    scanCanvas = document.createElement('canvas');
+    scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+
+    runScanLoop(myGeneration);
   } catch(e) {
     toast('Kameran kunde inte starta: ' + e.message);
     scannerActive = false;
   }
 }
 
-let zxingControls = null;
+function runScanLoop(myGeneration) {
+  // Self-terminate if a newer generation has started, or scanner was stopped.
+  if (myGeneration !== scanGeneration || !scannerActive || !scanVideoEl) return;
+
+  const debugEl = document.getElementById('scan-debug');
+
+  if (!scanPaused && scanVideoEl.readyState === scanVideoEl.HAVE_ENOUGH_DATA && scanVideoEl.videoWidth > 0) {
+    scanFrameCount++;
+    const vw = scanVideoEl.videoWidth;
+    const vh = scanVideoEl.videoHeight;
+    scanCanvas.width = vw;
+    scanCanvas.height = vh;
+    scanCtx.drawImage(scanVideoEl, 0, 0, vw, vh);
+
+    try {
+      const imageData = scanCtx.getImageData(0, 0, vw, vh);
+      const len = vw * vh;
+      const luminances = new Uint8ClampedArray(len);
+      const data = imageData.data;
+      for (let i = 0, j = 0; i < len; i++, j += 4) {
+        luminances[i] = (data[j] * 0.299 + data[j+1] * 0.587 + data[j+2] * 0.114);
+      }
+      const luminanceSource = new ZXing.RGBLuminanceSource(luminances, vw, vh);
+      const binaryBitmap = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminanceSource));
+      const result = zxingReader.decode(binaryBitmap);
+      if (result && myGeneration === scanGeneration && scannerActive) {
+        handleScanResult(result.getText());
+      }
+      scanLastError = '';
+    } catch (err) {
+      scanLastError = (err && err.name) ? err.name : 'NotFoundException';
+    }
+
+    if (debugEl && scanFrameCount % 5 === 0) {
+      debugEl.textContent = 'frames:' + scanFrameCount + ' ' + vw + 'x' + vh + ' ' + (scanLastError || 'OK');
+    }
+  }
+
+  scanRAF = requestAnimationFrame(() => runScanLoop(myGeneration));
+}
 
 async function toggleTorch() {
   if (!currentStream) return;
@@ -1145,8 +1193,6 @@ async function toggleTorch() {
     toast('Belysning stöds inte på denna enhet');
   }
 }
-
-let scanPaused = false;
 
 function handleScanResult(code) {
   if (!scannerActive || scanPaused) return;
@@ -1170,7 +1216,6 @@ function handleScanResult(code) {
     toast('Streckkod: ' + code + ' — ej i sortimentet');
   }
 
-  // Pause scanning for 1.5s after any successful read — gives time to move the camera away
   scanPaused = true;
   setTimeout(() => { scanPaused = false; }, 1500);
 }
@@ -1178,14 +1223,16 @@ function handleScanResult(code) {
 function stopScanner() {
   if (!scannerActive) return;
   scannerActive = false;
+  scanGeneration++; // any in-flight async work or loop iteration will see this and self-terminate
+
   try {
-    if (zxingControls) {
-      zxingControls.stop();
-      zxingControls = null;
+    if (scanRAF) {
+      cancelAnimationFrame(scanRAF);
+      scanRAF = null;
     }
-    if (zxingReader) {
-      zxingReader.reset();
-      zxingReader = null;
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+      currentStream = null;
     }
     const container = document.getElementById('scanner-container');
     if (container) {
@@ -1194,11 +1241,14 @@ function stopScanner() {
         if (v.srcObject) {
           v.srcObject.getTracks().forEach(t => t.stop());
         }
+        v.srcObject = null;
         v.remove();
       });
     }
     scanVideoEl = null;
-    currentStream = null;
+    scanCanvas = null;
+    scanCtx = null;
+    zxingReader = null;
     torchOn = false;
     const torchBtn = document.getElementById('torch-btn');
     if (torchBtn) torchBtn.style.display = 'none';
