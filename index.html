@@ -1095,6 +1095,10 @@ async function startScanner() {
     // decodeFromConstraints handles getUserMedia + the continuous scan loop internally —
     // this is ZXing's own native continuous-scan API.
     zxingReader.decodeFromConstraints(constraints, video, (result, err) => {
+      // Hard guard — ignore everything if scanner has been stopped,
+      // in case ZXing's internal loop keeps firing after .stop() was called.
+      if (!scannerActive) return;
+
       scanFrameCount++;
       if (result) {
         handleScanResult(result.getText());
@@ -1145,7 +1149,7 @@ async function toggleTorch() {
 let scanPaused = false;
 
 function handleScanResult(code) {
-  if (scanPaused) return;
+  if (!scannerActive || scanPaused) return;
 
   const now = Date.now();
   if (code === lastScannedCode && now - lastScannedTime < 4000) return;
