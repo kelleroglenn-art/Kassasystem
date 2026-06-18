@@ -7,7 +7,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-<script src="https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js"></script>
+<script>
+  // Verify ZXing actually loaded with the classes we need, before the app tries to use it.
+  window.__zxingLoadStatus = (function() {
+    if (typeof ZXing === 'undefined') return 'ZXing global missing entirely';
+    if (typeof ZXing.BrowserMultiFormatReader !== 'function') return 'BrowserMultiFormatReader missing from ZXing';
+    return 'ok';
+  })();
+</script>
 <style>
   :root {
     --ink: #2d3a42;
@@ -1051,6 +1058,13 @@ async function startScanner() {
 
   const debugEl = document.getElementById('scan-debug');
 
+  if (window.__zxingLoadStatus !== 'ok') {
+    toast('ZXing laddades inte korrekt: ' + window.__zxingLoadStatus);
+    if (debugEl) debugEl.textContent = 'FEL: ' + window.__zxingLoadStatus;
+    scannerActive = false;
+    return;
+  }
+
   try {
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
@@ -1062,7 +1076,7 @@ async function startScanner() {
       ZXing.BarcodeFormat.UPC_E,
     ]);
 
-    zxingReader = new ZXingBrowser.BrowserMultiFormatReader(hints);
+    zxingReader = new ZXing.BrowserMultiFormatReader(hints);
 
     const container = document.getElementById('scanner-container');
     const video = document.createElement('video');
