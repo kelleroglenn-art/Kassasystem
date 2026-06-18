@@ -1142,9 +1142,13 @@ async function toggleTorch() {
   }
 }
 
+let scanPaused = false;
+
 function handleScanResult(code) {
+  if (scanPaused) return;
+
   const now = Date.now();
-  if (code === lastScannedCode && now - lastScannedTime < 2000) return;
+  if (code === lastScannedCode && now - lastScannedTime < 4000) return;
   lastScannedCode = code;
   lastScannedTime = now;
 
@@ -1161,6 +1165,10 @@ function handleScanResult(code) {
   } else {
     toast('Streckkod: ' + code + ' — ej i sortimentet');
   }
+
+  // Pause scanning for 1.5s after any successful read — gives time to move the camera away
+  scanPaused = true;
+  setTimeout(() => { scanPaused = false; }, 1500);
 }
 
 function stopScanner() {
@@ -1192,6 +1200,7 @@ function stopScanner() {
     if (torchBtn) torchBtn.style.display = 'none';
   } catch(e) {}
   lastScannedCode = '';
+  scanPaused = false;
 }
 
 // ═══════════════════════════════════════════════
