@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script>
   // Verify ZXing actually loaded with the classes we need, before the app tries to use it.
   window.__zxingLoadStatus = (function() {
@@ -1497,7 +1498,10 @@ function switchAdminTab(tab) {
 
 function renderAdminContent(tab) {
   const el = document.getElementById('admin-content');
-  if (tab === 'orders') el.innerHTML = renderAdminOrders();
+  if (tab === 'orders') {
+    el.innerHTML = renderAdminOrders();
+    setTimeout(renderOrderBarcodes, 50);
+  }
   else if (tab === 'stock') el.innerHTML = renderAdminStock();
   else if (tab === 'products') el.innerHTML = renderAdminProducts();
   else if (tab === 'customers') el.innerHTML = renderAdminCustomers();
@@ -1515,6 +1519,8 @@ function renderAdminOrders() {
     const itemsText = items.map(i => `${i.quantity}× ${i.name}`).join(', ');
     const time = o.Timestamp ? new Date(o.Timestamp).toLocaleString('sv-SE') : '';
     const oid = o.OrderID || o.orderId || '';
+    const total = o.total || o.Total || 0;
+    const barcodeId = 'bc-' + oid.replace(/[^a-zA-Z0-9]/g, '');
     return `
       <div class="order-card">
         <div class="order-header">
@@ -1524,7 +1530,11 @@ function renderAdminOrders() {
         </div>
         <div class="order-body">
           <div class="order-items-list">${itemsText}</div>
-          <div class="order-total">${o.total || o.Total} ${t('kr')}</div>
+          <div class="order-total">${total} ${t('kr')}</div>
+          <div style="background:#f9f9f9;border-radius:8px;padding:12px;margin-top:10px;text-align:center">
+            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Streckkod för kassaregistrering</div>
+            <svg id="${barcodeId}" style="max-width:100%"></svg>
+          </div>
           <button class="confirm-btn" style="background:#7dbce8;margin-top:8px" onclick="printOrder('${oid}')">🖨 Skriv ut kvitto</button>
           ${showConfirm ? `<button class="confirm-btn" onclick="confirmOrderAdmin('${oid}')">${t('confirmOrder')}</button>` : ''}
           <button class="confirm-btn" style="background:#ed6840;margin-top:8px" onclick="deleteOrderAdmin('${oid}')">🗑 Radera</button>
@@ -1543,6 +1553,31 @@ function renderAdminOrders() {
       ${done.map(o => renderOrder(o, false)).join('')}
     </div>
   `;
+}
+
+function renderOrderBarcodes() {
+  if (typeof JsBarcode === 'undefined') return;
+  appData.orders.forEach(o => {
+    const oid = o.OrderID || o.orderId || '';
+    const total = String(Math.round(Number(o.total || o.Total || 0)));
+    const barcodeId = 'bc-' + oid.replace(/[^a-zA-Z0-9]/g, '');
+    const el = document.getElementById(barcodeId);
+    if (el && total) {
+      try {
+        JsBarcode(el, total, {
+          format: 'CODE128',
+          width: 2,
+          height: 60,
+          displayValue: true,
+          text: total + ' kr — ' + (o.customerName || o.KundNamn || ''),
+          fontSize: 12,
+          margin: 8,
+          background: '#f9f9f9',
+          lineColor: '#2d3a42'
+        });
+      } catch(e) {}
+    }
+  });
 }
 
 function renderAdminStock() {
