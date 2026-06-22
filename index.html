@@ -909,6 +909,11 @@ function renderShopTabs() {
   document.getElementById('tab-returns').textContent = t('returns');
 }
 
+function toggleZeroStock() {
+  window._showZeroStock = !window._showZeroStock;
+  renderShopContent();
+}
+
 function switchShopTab(tab) {
   currentShopTab = tab;
   document.querySelectorAll('.shop-tab').forEach(b => b.classList.remove('active'));
@@ -931,7 +936,32 @@ function getCartQty(productId) {
 function renderShopContent() {
   const el = document.getElementById('shop-content');
   if (currentShopTab === 'browse') {
-    el.innerHTML = `<div class="product-grid">${appData.products.map(p => renderProductCard(p)).join('')}</div>`;
+    // Sort: in-cart first, then by stock descending, zero-stock last
+    const sorted = [...appData.products].sort((a, b) => {
+      const stockA = getCustomerStock(a.ProduktID);
+      const stockB = getCustomerStock(b.ProduktID);
+      const cartA = getCartQty(a.ProduktID);
+      const cartB = getCartQty(b.ProduktID);
+      if (cartA !== cartB) return cartB - cartA;
+      return stockB - stockA;
+    });
+
+    const inStock = sorted.filter(p => getCustomerStock(p.ProduktID) > 0 || getCartQty(p.ProduktID) > 0);
+    const outOfStock = sorted.filter(p => getCustomerStock(p.ProduktID) === 0 && getCartQty(p.ProduktID) === 0);
+
+    const showZero = window._showZeroStock || false;
+
+    el.innerHTML = `
+      <div class="product-grid">
+        ${inStock.map(p => renderProductCard(p)).join('')}
+        ${outOfStock.length > 0 ? `
+          <button onclick="toggleZeroStock()" style="background:none;border:none;color:var(--muted);font-size:0.85rem;padding:8px;cursor:pointer;text-align:center;width:100%">
+            ${showZero ? '▲ Dölj slutsålda' : '▼ Visa ' + outOfStock.length + ' slutsålda produkter'}
+          </button>
+          ${showZero ? outOfStock.map(p => renderProductCard(p)).join('') : ''}
+        ` : ''}
+      </div>
+    `;
   } else if (currentShopTab === 'scan') {
     if (scannerActive) stopScanner();
     el.innerHTML = `
@@ -1462,6 +1492,7 @@ function finishOrder() {
   lastOrder = null;
   currentCustomer = null;
   returns = [];
+  window._showZeroStock = false;
   showScreen('screen-lang');
 }
 
