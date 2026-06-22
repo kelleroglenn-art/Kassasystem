@@ -836,7 +836,7 @@ function goAdmin() {
 function checkAdminPin() {
   const val = document.getElementById('admin-pin-field').value;
   if (val.length >= 4) {
-    if (val === (localStorage.getItem('adminPin') || '0000')) {
+    if (val === (localStorage.getItem('adminPin') || '225588')) {
       document.getElementById('admin-pin-overlay').style.display = 'none';
       showScreen('screen-admin');
       renderAdminContent('orders');
@@ -1831,7 +1831,7 @@ function renderAdminCustomers() {
 function renderAdminSettings() {
   const url = localStorage.getItem('scriptUrl') || '';
   const swish = localStorage.getItem('swishNumber') || '';
-  const pin = localStorage.getItem('adminPin') || '0000';
+  const pin = localStorage.getItem('adminPin') || '225588';
   return `
     <div class="form-card">
       <div class="section-title" style="margin-bottom:16px">Google Apps Script</div>
