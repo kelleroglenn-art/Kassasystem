@@ -835,8 +835,9 @@ function goAdmin() {
 
 function checkAdminPin() {
   const val = document.getElementById('admin-pin-field').value;
-  if (val.length >= 4) {
-    if (val === (localStorage.getItem('adminPin') || '225588')) {
+  const correctPin = localStorage.getItem('adminPin') || '225588';
+  if (val.length >= correctPin.length) {
+    if (val === correctPin) {
       document.getElementById('admin-pin-overlay').style.display = 'none';
       showScreen('screen-admin');
       renderAdminContent('orders');
@@ -880,17 +881,20 @@ function selectCustomer(id) {
 
 function checkPin(val) {
   if (!selectedCustomerForPin) return;
-  if (val.length >= 4 && val === String(selectedCustomerForPin.PIN)) {
-    currentCustomer = selectedCustomerForPin;
-    cart = []; returns = [];
-    showScreen('screen-shop');
-    renderShopTabs();
-    renderShopContent();
-    document.getElementById('shop-customer-name').textContent = currentCustomer.Namn;
-    document.getElementById('shop-title').textContent = t('products');
-  } else if (val.length >= 4) {
-    toast(t('pinWrong'));
-    document.getElementById('pin-input').value = '';
+  const correctPin = String(selectedCustomerForPin.PIN);
+  if (val.length >= correctPin.length) {
+    if (val === correctPin) {
+      currentCustomer = selectedCustomerForPin;
+      cart = []; returns = [];
+      showScreen('screen-shop');
+      renderShopTabs();
+      renderShopContent();
+      document.getElementById('shop-customer-name').textContent = currentCustomer.Namn;
+      document.getElementById('shop-title').textContent = t('products');
+    } else {
+      toast(t('pinWrong'));
+      document.getElementById('pin-input').value = '';
+    }
   }
 }
 
