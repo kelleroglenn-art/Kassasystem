@@ -1500,7 +1500,7 @@ function renderAdminContent(tab) {
   const el = document.getElementById('admin-content');
   if (tab === 'orders') {
     el.innerHTML = renderAdminOrders();
-    setTimeout(renderOrderBarcodes, 50);
+    setTimeout(renderOrderBarcodes, 200);
   }
   else if (tab === 'stock') el.innerHTML = renderAdminStock();
   else if (tab === 'products') el.innerHTML = renderAdminProducts();
@@ -1556,26 +1556,37 @@ function renderAdminOrders() {
 }
 
 function renderOrderBarcodes() {
-  if (typeof JsBarcode === 'undefined') return;
+  if (typeof JsBarcode === 'undefined') {
+    console.warn('JsBarcode not loaded');
+    return;
+  }
   appData.orders.forEach(o => {
     const oid = o.OrderID || o.orderId || '';
-    const total = String(Math.round(Number(o.total || o.Total || 0)));
+    const total = Math.round(Number(o.total || o.Total || 0));
     const barcodeId = 'bc-' + oid.replace(/[^a-zA-Z0-9]/g, '');
     const el = document.getElementById(barcodeId);
-    if (el && total) {
-      try {
-        JsBarcode(el, total, {
-          format: 'CODE128',
-          width: 2,
-          height: 60,
-          displayValue: true,
-          text: total + ' kr — ' + (o.customerName || o.KundNamn || ''),
-          fontSize: 12,
-          margin: 8,
-          background: '#f9f9f9',
-          lineColor: '#2d3a42'
-        });
-      } catch(e) {}
+    if (!el) return;
+
+    // Use order ID as barcode value if total is missing
+    const barcodeValue = total > 0 ? String(total) : oid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+    const barcodeLabel = total > 0
+      ? total + ' kr — ' + (o.customerName || o.KundNamn || '')
+      : oid;
+
+    try {
+      JsBarcode(el, barcodeValue, {
+        format: 'CODE128',
+        width: 2,
+        height: 60,
+        displayValue: true,
+        text: barcodeLabel,
+        fontSize: 12,
+        margin: 8,
+        background: '#f9f9f9',
+        lineColor: '#2d3a42'
+      });
+    } catch(e) {
+      el.parentElement.innerHTML = '<span style="color:var(--muted);font-size:0.8rem">Streckkod kunde inte genereras</span>';
     }
   });
 }
