@@ -928,6 +928,7 @@ function renderShopContent() {
   if (currentShopTab === 'browse') {
     el.innerHTML = `<div class="product-grid">${appData.products.map(p => renderProductCard(p)).join('')}</div>`;
   } else if (currentShopTab === 'scan') {
+    if (scannerActive) stopScanner();
     el.innerHTML = `
       <div id="scanner-container"><div class="scan-line"></div></div>
       <div style="display:flex;justify-content:center;margin-bottom:8px">
@@ -1016,7 +1017,16 @@ function changeQty(productId, delta) {
     if (cart[idx].quantity <= 0) cart.splice(idx, 1);
     if (cart[idx] && cart[idx].quantity > stock) cart[idx].quantity = stock;
   }
-  renderShopContent();
+
+  // While actively scanning, don't tear down and rebuild the whole shop-content div —
+  // that destroys the live <video> element under the running scan loop's feet and
+  // causes a new camera stream to start on top of the old one (which never gets stopped).
+  // Just update the cart total bar and the small per-card quantity badge instead.
+  if (currentShopTab === 'scan') {
+    updateCartBar();
+  } else {
+    renderShopContent();
+  }
 }
 
 function changeReturn(productId, delta) {
