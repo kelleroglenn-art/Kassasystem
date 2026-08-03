@@ -984,12 +984,15 @@ function renderShopContent() {
   updateCartBar();
 }
 
-const CATEGORY_ICONS = { 'Färg': '🎨', 'Penslar': '🖌️', 'Papper': '📄', 'Tillbehör': '🧰' };
+const CATEGORY_ICONS = { 'Färg': '🎨', 'Penslar': '🖌️', 'Papper': '📄', 'Tillbehör': '🧰', 'Verktyg': '🔧', 'Material': '📦' };
+function getCategoryIcon(cat) {
+  return CATEGORY_ICONS[cat] || '📦';
+}
 
 function renderProductCard(p) {
   const stock = getCustomerStock(p.ProduktID);
   const qty = getCartQty(p.ProduktID);
-  const icon = CATEGORY_ICONS[p.Kategori] || '📦';
+  const icon = getCategoryIcon(p.Kategori);
   const stockClass = stock === 0 ? 'low' : stock <= 3 ? 'low' : '';
   const stockLabel = stock === 0 ? t('noStock') : stock <= 3 ? `${t('lowStock')}: ${stock}` : `${t('inStock')}: ${stock}`;
   const name = lang === 'en' && p.NamnEN ? p.NamnEN : p.Namn;
@@ -1024,7 +1027,7 @@ function renderReturnCard(p) {
   const name = lang === 'en' && p.NamnEN ? p.NamnEN : p.Namn;
   return `
     <div class="product-card">
-      <div class="product-icon">${CATEGORY_ICONS[p.Kategori] || '📦'}</div>
+      <div class="product-icon">${getCategoryIcon(p.Kategori)}</div>
       <div class="product-info">
         <div class="product-name">${name}</div>
         <div class="product-price">${p.Pris} ${t('kr')}</div>
@@ -1703,10 +1706,42 @@ async function adminSetStock() {
   renderAdminContent('stock');
 }
 
-const PRODUCT_CATEGORIES = ['Färg', 'Verktyg', 'Material', 'Penslar', 'Papper', 'Tillbehör'];
+function getCategories() {
+  const stored = localStorage.getItem('productCategories');
+  if (stored) {
+    try { return JSON.parse(stored); } catch(e) {}
+  }
+  return ['Färg', 'Verktyg', 'Material', 'Penslar', 'Papper', 'Tillbehör'];
+}
+
+function saveCategories(cats) {
+  localStorage.setItem('productCategories', JSON.stringify(cats));
+}
+
+function addCategory() {
+  const input = document.getElementById('new-cat-input');
+  const name = input.value.trim();
+  if (!name) return;
+  const cats = getCategories();
+  if (cats.includes(name)) { toast('Kategorin finns redan'); return; }
+  cats.push(name);
+  saveCategories(cats);
+  input.value = '';
+  toast('✓ Kategori tillagd');
+  renderAdminContent('products');
+}
+
+function deleteCategory(name) {
+  if (!confirm('Ta bort kategorin "' + name + '"? Produkter i den kategorin påverkas inte.')) return;
+  const cats = getCategories().filter(c => c !== name);
+  saveCategories(cats);
+  toast('🗑 Kategori borttagen');
+  renderAdminContent('products');
+}
 
 function renderAdminProducts() {
-  const catOptions = PRODUCT_CATEGORIES.map(c => '<option>' + c + '</option>').join('');
+  const cats = getCategories();
+  const catOptions = cats.map(c => '<option>' + c + '</option>').join('');
   return `
     <div class="form-card">
       <div class="section-title" style="margin-bottom:16px">${t('addProduct')}</div>
@@ -1727,10 +1762,20 @@ function renderAdminProducts() {
       </div>
       <button class="btn btn-primary btn-full" onclick="adminAddProduct()">${t('save')}</button>
     </div>
-    <div class="section-title">Alla produkter (${appData.products.length})</div>
+    <div class="form-card" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:12px">Kategorier</div>
+      <div id="cat-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        ${cats.map(c => '<span style="background:var(--cream);padding:6px 12px;border-radius:20px;font-size:0.85rem;display:inline-flex;align-items:center;gap:6px">' + c + '<button onclick="deleteCategory(\'' + c + '\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:0;line-height:1">✕</button></span>').join('')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <input id="new-cat-input" placeholder="Ny kategori..." style="flex:1;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--r);font-family:'DM Sans',sans-serif;font-size:0.95rem;outline:none">
+        <button class="btn btn-primary" onclick="addCategory()" style="padding:10px 16px">+ Lägg till</button>
+      </div>
+    </div>
+    <div class="section-title">${appData.products.length} produkter</div>
     ${appData.products.map(p => `
       <div class="card" style="padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px">
-        ${p.Bild ? `<img src="${p.Bild}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;flex-shrink:0">` : `<div style="width:48px;height:48px;border-radius:10px;background:var(--cream);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">${CATEGORY_ICONS[p.Kategori] || '📦'}</div>`}
+        ${p.Bild ? `<img src="${p.Bild}" style="width:48px;height:48px;border-radius:10px;object-fit:cover;flex-shrink:0">` : `<div style="width:48px;height:48px;border-radius:10px;background:var(--cream);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">${getCategoryIcon(p.Kategori)}</div>`}
         <div style="flex:1;min-width:0">
           <div style="font-weight:500">${p.Namn}</div>
           <div style="font-size:0.8rem;color:var(--muted)">${p.NamnEN} · ${p.Pris} kr</div>
