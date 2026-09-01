@@ -1318,7 +1318,7 @@ function renderCart() {
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const origTotal = cart.reduce((s, i) => s + (i.origPrice || i.price) * i.quantity, 0);
   const saved = origTotal - total;
-  const swishNum = localStorage.getItem('swishNumber') || '070-000 00 00';
+  const swishNum = localStorage.getItem('swishNumber') || '123 308 4720';
   const ref = currentCustomer ? currentCustomer.SwishRef : '';
   el.innerHTML = `
     <div>${cart.map(i => `
@@ -1401,7 +1401,7 @@ let pendingProductImage = '';
 
 function showReceiptScreen(order, total, origTotal) {
   const saved = origTotal - total;
-  const swishNum = localStorage.getItem('swishNumber') || '070-000 00 00';
+  const swishNum = localStorage.getItem('swishNumber') || '123 308 4720';
   const ref = currentCustomer ? currentCustomer.SwishRef : '';
   const now = new Date().toLocaleString('sv-SE');
   const orderId = order.OrderID || ('ORD-' + Date.now());
@@ -1467,7 +1467,7 @@ async function sendReceiptEmail() {
   const total = lastOrder.total;
   const origTotal = lastOrderOrig;
   const saved = origTotal - total;
-  const swishNum = localStorage.getItem('swishNumber') || '070-000 00 00';
+  const swishNum = localStorage.getItem('swishNumber') || '123 308 4720';
   const ref = currentCustomer ? currentCustomer.SwishRef : '';
   
   if (SCRIPT_URL) {
@@ -1569,9 +1569,9 @@ function renderAdminOrders() {
         <div class="order-body">
           <div class="order-items-list">${itemsText}</div>
           <div class="order-total">${total} ${t('kr')}</div>
-          <div style="background:#f9f9f9;border-radius:8px;padding:12px;margin-top:10px;text-align:center">
-            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Streckkod för kassaregistrering</div>
-            <svg id="${barcodeId}" style="max-width:100%"></svg>
+          <div style="background:#f9f9f9;border-radius:8px;padding:12px;margin-top:10px">
+            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Streckkoder för kassaregistrering</div>
+            <div id="${barcodeId}"></div>
           </div>
           <button class="confirm-btn" style="background:#7dbce8;margin-top:8px" onclick="printOrder('${oid}')">🖨 Skriv ut kvitto</button>
           ${showConfirm ? `<button class="confirm-btn" onclick="confirmOrderAdmin('${oid}')">${t('confirmOrder')}</button>` : ''}
@@ -1594,38 +1594,64 @@ function renderAdminOrders() {
 }
 
 function renderOrderBarcodes() {
-  if (typeof JsBarcode === 'undefined') {
-    console.warn('JsBarcode not loaded');
-    return;
-  }
+  if (typeof JsBarcode === 'undefined') return;
+
   appData.orders.forEach(o => {
     const oid = o.OrderID || o.orderId || '';
-    const total = Math.round(Number(o.total || o.Total || 0));
     const barcodeId = 'bc-' + oid.replace(/[^a-zA-Z0-9]/g, '');
-    const el = document.getElementById(barcodeId);
-    if (!el) return;
+    const container = document.getElementById(barcodeId);
+    if (!container) return;
 
-    // Use order ID as barcode value if total is missing
-    const barcodeValue = total > 0 ? String(total) : oid.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
-    const barcodeLabel = total > 0
-      ? total + ' kr — ' + (o.customerName || o.KundNamn || '')
-      : oid;
-
-    try {
-      JsBarcode(el, barcodeValue, {
-        format: 'CODE128',
-        width: 2,
-        height: 60,
-        displayValue: true,
-        text: barcodeLabel,
-        fontSize: 12,
-        margin: 8,
-        background: '#f9f9f9',
-        lineColor: '#2d3a42'
-      });
-    } catch(e) {
-      el.parentElement.innerHTML = '<span style="color:var(--muted);font-size:0.8rem">Streckkod kunde inte genereras</span>';
+    let items = [];
+    try { items = JSON.parse(o.Items || o.itemsJson || '[]'); } catch(e) {}
+    if (items.length === 0) {
+      container.innerHTML = '<span style="color:var(--muted);font-size:0.8rem">Inga artiklar</span>';
+      return;
     }
+
+    // Render one barcode per item using the product's actual barcode
+    let html = '';
+    items.forEach((item, idx) => {
+      const bcId = barcodeId + '_' + idx;
+      // Use product barcode if available, otherwise fall back to product ID
+      const prod = appData.products.find(p => p.ProduktID === item.productId);
+      const barcodeVal = prod && prod.Streckkod
+        ? String(prod.Streckkod).split(',')[0].trim()
+        : item.productId;
+      const label = item.quantity + '× ' + item.name + ' — ' + (item.price * item.quantity) + ' kr';
+      html += '<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #eee">';
+      html += '<svg id="' + bcId + '" style="max-width:100%"></svg>';
+      html += '</div>';
+      // Keep track to render after innerHTML set
+    });
+    container.innerHTML = html;
+
+    // Now render each barcode
+    items.forEach((item, idx) => {
+      const bcId = barcodeId + '_' + idx;
+      const el = document.getElementById(bcId);
+      if (!el) return;
+      const prod = appData.products.find(p => p.ProduktID === item.productId);
+      const barcodeVal = prod && prod.Streckkod
+        ? String(prod.Streckkod).split(',')[0].trim()
+        : item.productId;
+      const label = item.quantity + '× ' + item.name + ' — ' + (item.price * item.quantity) + ' kr';
+      try {
+        JsBarcode(el, barcodeVal, {
+          format: 'CODE128',
+          width: 2,
+          height: 50,
+          displayValue: true,
+          text: label,
+          fontSize: 11,
+          margin: 6,
+          background: '#f9f9f9',
+          lineColor: '#2d3a42'
+        });
+      } catch(e) {
+        el.outerHTML = '<p style="font-size:0.8rem;color:var(--muted)">' + label + ' (streckkod saknas)</p>';
+      }
+    });
   });
 }
 
@@ -1910,7 +1936,7 @@ function renderAdminCustomers() {
 
 function renderAdminSettings() {
   const url = localStorage.getItem('scriptUrl') || '';
-  const swish = localStorage.getItem('swishNumber') || '';
+  const swish = localStorage.getItem('swishNumber') || '123 308 4720';
   const pin = localStorage.getItem('adminPin') || '225588';
   return `
     <div class="form-card">
@@ -2063,7 +2089,7 @@ function printOrder(orderId) {
   let items = [];
   try { items = JSON.parse(order.Items || order.itemsJson || '[]'); } catch(e){}
   const total = order.total || order.Total || 0;
-  const swishNum = localStorage.getItem('swishNumber') || '070-000 00 00';
+  const swishNum = localStorage.getItem('swishNumber') || '123 308 4720';
   const time = order.Timestamp ? new Date(order.Timestamp).toLocaleString('sv-SE') : '';
 
   const w = window.open('', '_blank');
